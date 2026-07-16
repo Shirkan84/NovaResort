@@ -28,4 +28,8 @@ npm run build
 
 The included GitHub Actions workflow builds and publishes the site to GitHub Pages whenever `main` is updated.
 
+## Supabase setup
+
+Run [`supabase/schema.sql`](supabase/schema.sql) once in the Supabase SQL Editor. It creates the application tables, starter community rooms, user-profile trigger, real-time publications, and row-level security policies required by the live community features.
+
 > Nova Resort is a peer-support and wellness community concept. It is not a substitute for medical, psychological, psychiatric, or emergency services.
