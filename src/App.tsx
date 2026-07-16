@@ -6,29 +6,19 @@ import {
 } from 'lucide-react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
-import { ChatRoom, DbRoom, EditProfile, Notifications, PeopleDirectory } from './CommunityFeatures'
+import { ChatRoom, DbRoom, EditProfile, Notifications, PeopleDirectory, PrivateChats, SafetyCenter } from './CommunityFeatures'
 import { applyLanguage, getLanguage, switchLanguage } from './i18n'
 
 type Room = {
   title: string; description: string; people: number; color: string; icon: string; tags: string[]
 }
+type LiveProfile = { id:string;full_name:string;display_name:string|null;avatar_url:string|null;profile_type:string;specialties:string[];about:string;online:boolean }
+type RecentMessage = { id:string;body:string;created_at:string;profiles?:{full_name:string;avatar_url:string|null}|null;rooms?:{id:string;name:string}|null }
 
 const rooms: Room[] = [
   { title: 'Heart to Heart', description: 'A gentle space for honest conversations and mutual support.', people: 28, color: 'peach', icon: '♡', tags: ['Open', 'Moderated'] },
   { title: 'Mindful Moments', description: 'Pause, breathe, and return to yourself with the community.', people: 16, color: 'sage', icon: '✦', tags: ['Open', 'Guided'] },
   { title: 'Self Growth', description: 'Celebrate progress, share intentions, and grow together.', people: 21, color: 'lavender', icon: '⌁', tags: ['Open', 'Community'] },
-]
-
-const healers = [
-  { name: 'Maya Bennett', role: 'Mindfulness guide', focus: 'Anxiety & stress', avatar: 'MB', tone: 'rose', online: true },
-  { name: 'Noah Williams', role: 'Wellness coach', focus: 'Self growth', avatar: 'NW', tone: 'blue', online: true },
-  { name: 'Amara Lewis', role: 'Breathwork guide', focus: 'Mind & body', avatar: 'AL', tone: 'gold', online: false },
-]
-
-const conversations = [
-  { name: 'Olivia Chen', message: 'That really helped, thank you 🌿', time: '2m', avatar: 'OC', unread: 2 },
-  { name: 'Heart to Heart', message: 'Lucas: Does anyone else feel...', time: '12m', avatar: '♡', unread: 0 },
-  { name: 'Noah Williams', message: 'Of course. Take all the time you need.', time: '1h', avatar: 'NW', unread: 0 },
 ]
 
 function Logo() {
@@ -100,7 +90,12 @@ function App() {
   const [activeNav, setActiveNav] = useState('Home')
   const [dbRooms, setDbRooms] = useState<DbRoom[]>([])
   const [selectedRoom, setSelectedRoom] = useState<DbRoom | null>(null)
-  const [feature, setFeature] = useState<'people'|'profile'|'notifications'|null>(null)
+  const [feature, setFeature] = useState<'people'|'profile'|'notifications'|'messages'|'safety'|null>(null)
+  const [showAllRooms,setShowAllRooms] = useState(false)
+  const [liveHealers,setLiveHealers] = useState<LiveProfile[]>([])
+  const [recentMessages,setRecentMessages] = useState<RecentMessage[]>([])
+  const [currentAvatar,setCurrentAvatar] = useState<string|null>(null)
+  const [metrics,setMetrics] = useState({members:0,online:0,healers:0,rooms:0,sessions:0,notifications:0})
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setAuthLoading(false) })
@@ -110,10 +105,30 @@ function App() {
   useEffect(() => applyLanguage(language), [language])
   useEffect(() => {
     if (!session) return
-    supabase.from('rooms').select('id,name,description,icon,theme,is_private').eq('is_private',false).limit(6).then(({data}) => setDbRooms((data as DbRoom[]) || []))
+    const loadLiveData=async()=>{
+      const fiveMinutesAgo=new Date(Date.now()-5*60*1000).toISOString()
+      const [rooms,allMembers,online,healerCount,healers,activeRooms,sessions,notifications,activity,me]=await Promise.all([
+        supabase.from('rooms').select('id,name,description,icon,theme,is_private').eq('is_private',false).limit(6),
+        supabase.from('profiles').select('id',{count:'exact',head:true}),
+        supabase.from('profiles').select('id',{count:'exact',head:true}).gte('last_seen',fiveMinutesAgo),
+        supabase.from('profiles').select('id',{count:'exact',head:true}).eq('profile_type','healer'),
+        supabase.from('profiles').select('id,full_name,display_name,avatar_url,profile_type,specialties,about,online').eq('profile_type','healer').limit(6),
+        supabase.from('rooms').select('id',{count:'exact',head:true}).eq('is_private',false),
+        supabase.from('video_sessions').select('id',{count:'exact',head:true}).or(`host_id.eq.${session.user.id},guest_id.eq.${session.user.id}`).in('status',['invited','active']),
+        supabase.from('notifications').select('id',{count:'exact',head:true}).eq('user_id',session.user.id).is('read_at',null),
+        supabase.from('messages').select('id,body,created_at,profiles!messages_sender_id_fkey(full_name,avatar_url),rooms!messages_room_id_fkey(id,name)').order('created_at',{ascending:false}).limit(3),
+        supabase.from('profiles').select('avatar_url').eq('id',session.user.id).single()
+      ])
+      setDbRooms((rooms.data as DbRoom[])||[]);setLiveHealers((healers.data as LiveProfile[])||[]);setRecentMessages((activity.data as unknown as RecentMessage[])||[]);setCurrentAvatar(me.data?.avatar_url||null)
+      setMetrics({members:allMembers.count||0,online:online.count||0,healers:healerCount.count||0,rooms:activeRooms.count||0,sessions:sessions.count||0,notifications:notifications.count||0})
+    }
+    const heartbeat=()=>supabase.from('profiles').update({online:true,last_seen:new Date().toISOString()}).eq('id',session.user.id)
+    heartbeat();loadLiveData();const timer=window.setInterval(()=>{heartbeat();loadLiveData()},60000)
+    return()=>{window.clearInterval(timer);supabase.from('profiles').update({online:false,last_seen:new Date().toISOString()}).eq('id',session.user.id)}
   }, [session])
 
   const act = (text: string) => { setNotice(text); window.setTimeout(() => setNotice(''), 2800) }
+  async function startPrivateMessage(person:LiveProfile){const {data,error}=await supabase.rpc('create_private_room',{other_user:person.id});if(error){act(error.message);return}setSelectedRoom({id:data,name:person.display_name||person.full_name,description:'Private two-person conversation',icon:'♢',theme:'sage',is_private:true})}
 
   if (authLoading) return <div className="auth-loader"><Logo/><span/></div>
   if (!session) return <AuthScreen/>
@@ -126,17 +141,17 @@ function App() {
       <nav>
         {[
           [Home, 'Home'], [Compass, 'Discover'], [MessageCircleMore, 'Messages'], [UsersRound, 'Community'], [CalendarDays, 'Sessions']
-        ].map(([Icon, label]) => <button key={label as string} className={activeNav === label ? 'nav-item active' : 'nav-item'} onClick={() => {setActiveNav(label as string); setMenuOpen(false); if(label==='Community'||label==='Discover')setFeature('people');else act(`${label} selected`)}}><Icon size={19}/><span>{label as string}</span>{label === 'Messages' && <i>2</i>}</button>)}
+        ].map(([Icon, label]) => <button key={label as string} className={activeNav === label ? 'nav-item active' : 'nav-item'} onClick={() => {setActiveNav(label as string);setMenuOpen(false);if(label==='Community'||label==='Discover')setFeature('people');else if(label==='Messages')setFeature('messages');else if(label==='Sessions')setFeature('notifications');else {setFeature(null);window.scrollTo({top:0,behavior:'smooth'})}}}><Icon size={19}/><span>{label as string}</span>{label === 'Messages' && metrics.sessions > 0 && <i>{metrics.sessions}</i>}</button>)}
       </nav>
       <div className="side-card">
         <div className="side-card-icon"><ShieldCheck size={20}/></div>
         <b>Your safety matters</b>
         <p>Explore our community guidelines and support resources.</p>
-        <button onClick={() => act('Safety center opened')}>Visit safety center <ChevronRight size={14}/></button>
+        <button onClick={() => setFeature('safety')}>Visit safety center <ChevronRight size={14}/></button>
       </div>
       <div className="side-bottom">
-        <button className="nav-item" onClick={() => act('Settings opened')}><Settings size={19}/><span>Settings</span></button>
-        <button className="profile-mini" onClick={() => setFeature('profile')}><div className="avatar user">{initials}</div><div><b>{name}</b><span>Community member</span></div><MoreHorizontal size={18}/></button>
+        <button className="nav-item" onClick={() => setFeature('profile')}><Settings size={19}/><span>Settings</span></button>
+        <button className="profile-mini" onClick={() => setFeature('profile')}><div className="avatar user">{currentAvatar?<img src={currentAvatar} alt=""/>:initials}</div><div><b>{name}</b><span>Community member</span></div><MoreHorizontal size={18}/></button>
         <button className="signout" onClick={() => supabase.auth.signOut()}>Sign out</button>
       </div>
     </aside>
@@ -145,34 +160,34 @@ function App() {
       <header>
         <button className="icon-btn menu-btn" onClick={() => setMenuOpen(true)}><Menu size={22}/></button>
         <div className="mobile-logo"><Logo/></div>
-        <div className="search"><Search size={18}/><input aria-label="Search" placeholder="Search people, rooms, or topics..."/><span>⌘ K</span></div>
+        <div className="search" onClick={()=>setFeature('people')}><Search size={18}/><input aria-label="Search" readOnly placeholder="Search people, rooms, or topics..."/><span>⌘ K</span></div>
         <div className="header-actions">
           <button className="language-toggle" onClick={()=>switchLanguage(language==='en'?'he':'en')}><Languages size={17}/>{language==='en'?'עברית':'English'}</button>
           <button className="icon-btn" aria-label="Toggle theme" onClick={() => setDark(!dark)}>{dark ? <Sun size={19}/> : <Moon size={19}/>}</button>
-          <button className="icon-btn notification" aria-label="Notifications" onClick={() => setFeature('notifications')}><Bell size={20}/><i>3</i></button>
-          <button className="user-chip"><div className="avatar user">{initials}</div><ChevronDown size={15}/></button>
+          <button className="icon-btn notification" aria-label="Notifications" onClick={() => setFeature('notifications')}><Bell size={20}/>{metrics.notifications>0&&<i>{metrics.notifications}</i>}</button>
+          <button className="user-chip" onClick={()=>setFeature('profile')}><div className="avatar user">{currentAvatar?<img src={currentAvatar} alt=""/>:initials}</div><ChevronDown size={15}/></button>
         </div>
       </header>
 
       <div className="content">
         <section className="welcome">
           <div><p className="eyebrow">WELCOME TO NOVA RESORT</p><h1>Good to see you, {name.split(' ')[0]} <span>✦</span></h1><p>Take a breath. You’re in a place where you can simply be.</p></div>
-          <button className="primary" onClick={() => act('Discovering community rooms')}><Compass size={17}/> Explore the community</button>
+          <button className="primary" onClick={() => setFeature('people')}><Compass size={17}/> Explore the community</button>
         </section>
 
         <div className="stats">
-          <div><span className="stat-icon green"><UsersRound/></span><p><b>248</b><small>Members online</small></p><em>+12%</em></div>
-          <div><span className="stat-icon purple"><Heart/></span><p><b>18</b><small>Healers available</small></p><em>Online now</em></div>
-          <div><span className="stat-icon amber"><MessageCircleMore/></span><p><b>11</b><small>Active rooms</small></p><em>Join anytime</em></div>
-          <div><span className="stat-icon blue"><CalendarDays/></span><p><b>2</b><small>Upcoming sessions</small></p><button onClick={() => act('Calendar opened')}>View calendar</button></div>
+          <div><span className="stat-icon green"><UsersRound/></span><p><b>{metrics.online}</b><small>Members online</small></p><em>{metrics.members} registered</em></div>
+          <div><span className="stat-icon purple"><Heart/></span><p><b>{metrics.healers}</b><small>Healers available</small></p><em>Registered guides</em></div>
+          <div><span className="stat-icon amber"><MessageCircleMore/></span><p><b>{metrics.rooms}</b><small>Active rooms</small></p><em>Join anytime</em></div>
+          <div><span className="stat-icon blue"><CalendarDays/></span><p><b>{metrics.sessions}</b><small>Upcoming sessions</small></p><button onClick={() => setFeature('notifications')}>View invitations</button></div>
         </div>
 
         <div className="layout">
           <div className="main-col">
             <section>
-              <div className="section-head"><div><h2>Find your space</h2><p>Join a conversation that feels right for you today.</p></div><button onClick={() => act('Showing all rooms')}>View all rooms <ChevronRight size={16}/></button></div>
+              <div className="section-head"><div><h2>Find your space</h2><p>Join a conversation that feels right for you today.</p></div><button onClick={() => setShowAllRooms(!showAllRooms)}>{showAllRooms?'Show fewer rooms':'View all rooms'} <ChevronRight size={16}/></button></div>
               <div className="room-grid">
-                {(dbRooms.length ? dbRooms.slice(0,3).map(r=>({title:r.name,description:r.description,people:0,color:r.theme,icon:r.icon,tags:['Open','Live'],db:r})) : rooms.map(r=>({...r,db:null as DbRoom|null}))).map(room => <article className={`room-card ${room.color}`} key={room.title}>
+                {(dbRooms.length ? dbRooms.slice(0,showAllRooms?6:3).map(r=>({title:r.name,description:r.description,people:0,color:r.theme,icon:r.icon,tags:['Open','Live'],db:r})) : rooms.map(r=>({...r,db:null as DbRoom|null}))).map(room => <article className={`room-card ${room.color}`} key={room.title}>
                   <div className="room-art"><span>{room.icon}</span><div className="bubble b1"></div><div className="bubble b2"></div><div className="bubble b3"></div></div>
                   <div className="room-info"><div className="tags">{room.tags.map((t,i) => <span key={t} className={i === 0 ? 'open-tag' : ''}>{i === 0 && <i/>}{t}</span>)}</div><h3>{room.title}</h3><p>{room.description}</p><div className="room-bottom"><span><UsersRound size={15}/>{room.people ? `${room.people} here now` : 'Real-time room'}</span><button onClick={() => room.db ? setSelectedRoom(room.db) : act('Database setup is required first')}>Join room <ChevronRight size={15}/></button></div></div>
                 </article>)}
@@ -180,11 +195,11 @@ function App() {
             </section>
 
             <section className="healer-section">
-              <div className="section-head"><div><h2>Connect with a healer</h2><p>Verified guides who are here to listen and support.</p></div><button onClick={() => act('Showing all healers')}>View all healers <ChevronRight size={16}/></button></div>
-              <div className="healer-grid">{healers.map(h => <article className="healer-card" key={h.name}>
-                <div className={`avatar healer ${h.tone}`}>{h.avatar}<i className={h.online ? 'online' : ''}/></div>
-                <div className="healer-info"><h3>{h.name}<ShieldCheck size={14}/></h3><p>{h.role}</p><span>{h.focus}</span></div>
-                <button aria-label={`Message ${h.name}`} onClick={() => act(`Starting a conversation with ${h.name}`)}><MessageCircleMore size={18}/></button>
+              <div className="section-head"><div><h2>Connect with a healer</h2><p>Community healers who are here to listen and support.</p></div><button onClick={() => setFeature('people')}>View all healers <ChevronRight size={16}/></button></div>
+              <div className="healer-grid">{liveHealers.length===0?<div className="inline-empty">No healers have registered yet.</div>:liveHealers.slice(0,3).map((h,i) => <article className="healer-card" key={h.id}>
+                <div className={`avatar healer ${['rose','blue','gold'][i%3]}`}>{h.avatar_url?<img src={h.avatar_url} alt=""/>:(h.display_name||h.full_name||'H').slice(0,2).toUpperCase()}<i className={h.online ? 'online' : ''}/></div>
+                <div className="healer-info"><h3>{h.display_name||h.full_name}<Heart size={14}/></h3><p>Healer / Therapist</p><span>{h.specialties?.[0]||'Emotional wellness'}</span></div>
+                <button aria-label={`Message ${h.full_name}`} onClick={() => startPrivateMessage(h)}><MessageCircleMore size={18}/></button>
               </article>)}</div>
             </section>
 
@@ -192,14 +207,14 @@ function App() {
           </div>
 
           <aside className="right-col">
-            <section className="panel conversations"><div className="panel-head"><h3>Recent conversations</h3><button onClick={() => act('Messages opened')}>View all</button></div>
-              {conversations.map(c => <button className="conversation" key={c.name} onClick={() => act(`Opening conversation with ${c.name}`)}><div className="avatar soft">{c.avatar}</div><div><b>{c.name}</b><p>{c.message}</p></div><span>{c.time}{c.unread > 0 && <i>{c.unread}</i>}</span></button>)}
-              <button className="new-message" onClick={() => act('New message started')}><Send size={16}/> Start a new message</button>
+            <section className="panel conversations"><div className="panel-head"><h3>Recent conversations</h3><button onClick={() => setFeature('messages')}>View all</button></div>
+              {recentMessages.length===0?<p className="mini-empty">No community messages yet.</p>:recentMessages.map(c => <button className="conversation" key={c.id} onClick={() => c.rooms&&setSelectedRoom({id:c.rooms.id,name:c.rooms.name,description:'Community conversation',icon:'♡',theme:'sage',is_private:false})}><div className="avatar soft">{c.profiles?.avatar_url?<img src={c.profiles.avatar_url} alt=""/>:(c.profiles?.full_name||'N').slice(0,1)}</div><div><b>{c.profiles?.full_name||'Community member'}</b><p>{c.body}</p></div><span>{new Date(c.created_at).toLocaleDateString()}</span></button>)}
+              <button className="new-message" onClick={() => setFeature('people')}><Send size={16}/> Start a new message</button>
             </section>
 
-            <section className="panel session"><div className="panel-head"><h3>Upcoming session</h3><button><MoreHorizontal size={18}/></button></div>
-              <div className="date-box"><b>18</b><span>JUL</span></div><div className="session-copy"><h4>Mindful breathing</h4><p>with Maya Bennett</p><span><Clock3 size={14}/> Tomorrow, 10:30 AM</span></div>
-              <button className="join-session" onClick={() => act('Video room will open at session time')}><Video size={16}/> Join session</button>
+            <section className="panel session"><div className="panel-head"><h3>Private wellness sessions</h3><button onClick={()=>setFeature('notifications')}><MoreHorizontal size={18}/></button></div>
+              <div className="date-box"><b>{metrics.sessions}</b><span>LIVE</span></div><div className="session-copy"><h4>{metrics.sessions?'Session invitation waiting':'No upcoming sessions'}</h4><p>{metrics.sessions?'Open your invitations to join.':'Connect with a healer or community member.'}</p><span><Clock3 size={14}/> Private two-person video</span></div>
+              <button className="join-session" onClick={() => setFeature(metrics.sessions?'notifications':'people')}><Video size={16}/> {metrics.sessions?'View invitations':'Find someone'}</button>
             </section>
 
             <section className="checkin"><span><CircleUserRound size={21}/></span><div><h3>How are you feeling?</h3><p>A small check-in can make a big difference.</p><div className="moods">{['😔','😕','😐','🙂','😊'].map(x => <button key={x} onClick={() => act('Thank you for checking in')}>{x}</button>)}</div></div></section>
@@ -211,9 +226,11 @@ function App() {
     </main>
     {menuOpen && <button className="backdrop" aria-label="Close menu" onClick={() => setMenuOpen(false)}/>} 
     {selectedRoom && <ChatRoom room={selectedRoom} userId={session.user.id} onClose={()=>setSelectedRoom(null)}/>} 
-    {feature==='people' && <PeopleDirectory userId={session.user.id} onClose={()=>setFeature(null)}/>} 
+    {feature==='people' && <PeopleDirectory userId={session.user.id} onClose={()=>setFeature(null)} onOpenRoom={setSelectedRoom}/>} 
+    {feature==='messages' && <PrivateChats onClose={()=>setFeature(null)} onOpenRoom={setSelectedRoom}/>} 
     {feature==='profile' && <EditProfile userId={session.user.id} onClose={()=>setFeature(null)}/>} 
     {feature==='notifications' && <Notifications userId={session.user.id} onClose={()=>setFeature(null)}/>} 
+    {feature==='safety' && <SafetyCenter onClose={()=>setFeature(null)}/>} 
     {notice && <div className="toast"><ShieldCheck size={17}/>{notice}</div>}
   </div>
 }
