@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
+import { ChatRoom, DbRoom, EditProfile, Notifications, PeopleDirectory } from './CommunityFeatures'
 
 type Room = {
   title: string; description: string; people: number; color: string; icon: string; tags: string[]
@@ -94,12 +95,19 @@ function App() {
   const [dark, setDark] = useState(false)
   const [notice, setNotice] = useState('')
   const [activeNav, setActiveNav] = useState('Home')
+  const [dbRooms, setDbRooms] = useState<DbRoom[]>([])
+  const [selectedRoom, setSelectedRoom] = useState<DbRoom | null>(null)
+  const [feature, setFeature] = useState<'people'|'profile'|'notifications'|null>(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setAuthLoading(false) })
     const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession))
     return () => data.subscription.unsubscribe()
   }, [])
+  useEffect(() => {
+    if (!session) return
+    supabase.from('rooms').select('id,name,description,icon,theme,is_private').eq('is_private',false).limit(6).then(({data}) => setDbRooms((data as DbRoom[]) || []))
+  }, [session])
 
   const act = (text: string) => { setNotice(text); window.setTimeout(() => setNotice(''), 2800) }
 
@@ -114,7 +122,7 @@ function App() {
       <nav>
         {[
           [Home, 'Home'], [Compass, 'Discover'], [MessageCircleMore, 'Messages'], [UsersRound, 'Community'], [CalendarDays, 'Sessions']
-        ].map(([Icon, label]) => <button key={label as string} className={activeNav === label ? 'nav-item active' : 'nav-item'} onClick={() => {setActiveNav(label as string); setMenuOpen(false); act(`${label} selected`)}}><Icon size={19}/><span>{label as string}</span>{label === 'Messages' && <i>2</i>}</button>)}
+        ].map(([Icon, label]) => <button key={label as string} className={activeNav === label ? 'nav-item active' : 'nav-item'} onClick={() => {setActiveNav(label as string); setMenuOpen(false); if(label==='Community'||label==='Discover')setFeature('people');else act(`${label} selected`)}}><Icon size={19}/><span>{label as string}</span>{label === 'Messages' && <i>2</i>}</button>)}
       </nav>
       <div className="side-card">
         <div className="side-card-icon"><ShieldCheck size={20}/></div>
@@ -124,7 +132,7 @@ function App() {
       </div>
       <div className="side-bottom">
         <button className="nav-item" onClick={() => act('Settings opened')}><Settings size={19}/><span>Settings</span></button>
-        <button className="profile-mini" onClick={() => act('Profile opened')}><div className="avatar user">{initials}</div><div><b>{name}</b><span>Community member</span></div><MoreHorizontal size={18}/></button>
+        <button className="profile-mini" onClick={() => setFeature('profile')}><div className="avatar user">{initials}</div><div><b>{name}</b><span>Community member</span></div><MoreHorizontal size={18}/></button>
         <button className="signout" onClick={() => supabase.auth.signOut()}>Sign out</button>
       </div>
     </aside>
@@ -136,7 +144,7 @@ function App() {
         <div className="search"><Search size={18}/><input aria-label="Search" placeholder="Search people, rooms, or topics..."/><span>⌘ K</span></div>
         <div className="header-actions">
           <button className="icon-btn" aria-label="Toggle theme" onClick={() => setDark(!dark)}>{dark ? <Sun size={19}/> : <Moon size={19}/>}</button>
-          <button className="icon-btn notification" aria-label="Notifications" onClick={() => act('You have 3 new notifications')}><Bell size={20}/><i>3</i></button>
+          <button className="icon-btn notification" aria-label="Notifications" onClick={() => setFeature('notifications')}><Bell size={20}/><i>3</i></button>
           <button className="user-chip"><div className="avatar user">{initials}</div><ChevronDown size={15}/></button>
         </div>
       </header>
@@ -159,9 +167,9 @@ function App() {
             <section>
               <div className="section-head"><div><h2>Find your space</h2><p>Join a conversation that feels right for you today.</p></div><button onClick={() => act('Showing all rooms')}>View all rooms <ChevronRight size={16}/></button></div>
               <div className="room-grid">
-                {rooms.map(room => <article className={`room-card ${room.color}`} key={room.title}>
+                {(dbRooms.length ? dbRooms.slice(0,3).map(r=>({title:r.name,description:r.description,people:0,color:r.theme,icon:r.icon,tags:['Open','Live'],db:r})) : rooms.map(r=>({...r,db:null as DbRoom|null}))).map(room => <article className={`room-card ${room.color}`} key={room.title}>
                   <div className="room-art"><span>{room.icon}</span><div className="bubble b1"></div><div className="bubble b2"></div><div className="bubble b3"></div></div>
-                  <div className="room-info"><div className="tags">{room.tags.map((t,i) => <span key={t} className={i === 0 ? 'open-tag' : ''}>{i === 0 && <i/>}{t}</span>)}</div><h3>{room.title}</h3><p>{room.description}</p><div className="room-bottom"><span><UsersRound size={15}/>{room.people} here now</span><button onClick={() => act(`Joining ${room.title}`)}>Join room <ChevronRight size={15}/></button></div></div>
+                  <div className="room-info"><div className="tags">{room.tags.map((t,i) => <span key={t} className={i === 0 ? 'open-tag' : ''}>{i === 0 && <i/>}{t}</span>)}</div><h3>{room.title}</h3><p>{room.description}</p><div className="room-bottom"><span><UsersRound size={15}/>{room.people ? `${room.people} here now` : 'Real-time room'}</span><button onClick={() => room.db ? setSelectedRoom(room.db) : act('Database setup is required first')}>Join room <ChevronRight size={15}/></button></div></div>
                 </article>)}
               </div>
             </section>
@@ -197,6 +205,10 @@ function App() {
       </div>
     </main>
     {menuOpen && <button className="backdrop" aria-label="Close menu" onClick={() => setMenuOpen(false)}/>} 
+    {selectedRoom && <ChatRoom room={selectedRoom} userId={session.user.id} onClose={()=>setSelectedRoom(null)}/>} 
+    {feature==='people' && <PeopleDirectory userId={session.user.id} onClose={()=>setFeature(null)}/>} 
+    {feature==='profile' && <EditProfile userId={session.user.id} onClose={()=>setFeature(null)}/>} 
+    {feature==='notifications' && <Notifications userId={session.user.id} onClose={()=>setFeature(null)}/>} 
     {notice && <div className="toast"><ShieldCheck size={17}/>{notice}</div>}
   </div>
 }
