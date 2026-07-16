@@ -1,0 +1,48 @@
+import { FormEvent, useEffect, useRef, useState } from 'react'
+import { Bell, Check, ChevronLeft, Heart, MessageCircleMore, Send, UserPlus, UsersRound, Video, X } from 'lucide-react'
+import { supabase } from './supabase'
+
+export type DbRoom = { id:string; name:string; description:string; icon:string; theme:string; is_private:boolean }
+type Profile = { id:string; full_name:string; display_name:string|null; country:string|null; profile_type:string; about:string; interests:string[]; online:boolean }
+type Message = { id:string; body:string; sender_id:string; created_at:string; profiles?:{full_name:string}|null }
+type Notice = { id:string; type:string; title:string; body:string|null; entity_id:string|null; read_at:string|null; created_at:string }
+
+export function ChatRoom({ room, userId, onClose }:{room:DbRoom;userId:string;onClose:()=>void}) {
+  const [messages,setMessages]=useState<Message[]>([]), [text,setText]=useState(''), [loading,setLoading]=useState(true)
+  const bottom=useRef<HTMLDivElement>(null)
+  useEffect(()=>{
+    supabase.from('messages').select('id,body,sender_id,created_at,profiles!messages_sender_id_fkey(full_name)').eq('room_id',room.id).is('deleted_at',null).order('created_at').limit(100).then(({data})=>{setMessages((data as unknown as Message[])||[]);setLoading(false)})
+    const channel=supabase.channel(`room-${room.id}`).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:`room_id=eq.${room.id}`},async payload=>{
+      const {data}=await supabase.from('messages').select('id,body,sender_id,created_at,profiles!messages_sender_id_fkey(full_name)').eq('id',payload.new.id).single()
+      if(data)setMessages(old=>old.some(x=>x.id===data.id)?old:[...old,data as unknown as Message])
+    }).subscribe()
+    return()=>{supabase.removeChannel(channel)}
+  },[room.id])
+  useEffect(()=>bottom.current?.scrollIntoView({behavior:'smooth'}),[messages])
+  async function send(e:FormEvent){e.preventDefault();const body=text.trim();if(!body)return;setText('');const {error}=await supabase.from('messages').insert({room_id:room.id,sender_id:userId,body});if(error)setText(body)}
+  return <div className="feature-overlay"><section className="chat-window"><header><button onClick={onClose}><ChevronLeft/></button><div className={`chat-room-icon ${room.theme}`}>{room.icon}</div><div><h2>{room.name}</h2><span><i/> Community room · Be kind</span></div><button onClick={onClose}><X/></button></header><div className="safety-strip">This is a peer-support space. Protect your privacy and report harmful behaviour.</div><div className="message-list">{loading?<p className="empty-state">Opening the room…</p>:messages.length===0?<div className="empty-state"><MessageCircleMore/><h3>Start the conversation</h3><p>Be the first to share something kind or meaningful.</p></div>:messages.map(m=><div key={m.id} className={m.sender_id===userId?'chat-message mine':'chat-message'}><span>{m.profiles?.full_name?.slice(0,1)||'N'}</span><div><b>{m.sender_id===userId?'You':m.profiles?.full_name||'Member'} <small>{new Date(m.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</small></b><p>{m.body}</p></div></div>)}<div ref={bottom}/></div><form className="message-compose" onSubmit={send}><input value={text} onChange={e=>setText(e.target.value)} maxLength={4000} placeholder="Write a supportive message…"/><button aria-label="Send"><Send/></button></form></section></div>
+}
+
+export function PeopleDirectory({userId,onClose}:{userId:string;onClose:()=>void}){
+  const [people,setPeople]=useState<Profile[]>([]),[sent,setSent]=useState<string[]>([]),[query,setQuery]=useState('')
+  useEffect(()=>{supabase.from('profiles').select('id,full_name,display_name,country,profile_type,about,interests,online').neq('id',userId).limit(50).then(({data})=>setPeople((data as Profile[])||[]))},[userId])
+  async function friend(person:Profile){const {error}=await supabase.from('friendships').insert({requester_id:userId,addressee_id:person.id});if(!error){setSent(x=>[...x,person.id]);await supabase.from('notifications').insert({user_id:person.id,actor_id:userId,type:'friend_request',title:'New friend request',body:'Someone in the community would like to connect.'})}}
+  async function video(person:Profile){const {data,error}=await supabase.from('video_sessions').insert({host_id:userId,guest_id:person.id}).select('id').single();if(!error&&data){await supabase.from('notifications').insert({user_id:person.id,actor_id:userId,type:'video_invite',title:'Private video invitation',body:'You have been invited to a private wellness conversation.',entity_id:data.id});alert('Video invitation sent safely.')}}
+  const filtered=people.filter(p=>(p.display_name||p.full_name).toLowerCase().includes(query.toLowerCase())||(p.country||'').toLowerCase().includes(query.toLowerCase()))
+  return <div className="feature-overlay"><section className="directory-window"><header><div><h2>Community</h2><p>Discover thoughtful people and verified guides.</p></div><button onClick={onClose}><X/></button></header><input className="people-search" placeholder="Search by name or country…" value={query} onChange={e=>setQuery(e.target.value)}/><div className="people-list">{filtered.map(p=><article key={p.id}><span className="person-avatar">{(p.display_name||p.full_name||'N').split(' ').map(x=>x[0]).join('').slice(0,2)}</span><div><h3>{p.display_name||p.full_name}{p.profile_type==='healer'&&<em>Verified healer</em>}</h3><p>{p.country||'Nova Resort community'} · {p.about||'Here to connect and grow.'}</p></div><button disabled={sent.includes(p.id)} onClick={()=>friend(p)}>{sent.includes(p.id)?<Check/>:<UserPlus/>}</button><button onClick={()=>video(p)}><Video/></button></article>)}</div></section></div>
+}
+
+export function EditProfile({userId,onClose}:{userId:string;onClose:()=>void}){
+  const [profile,setProfile]=useState<Profile|null>(null),[saved,setSaved]=useState(false)
+  useEffect(()=>{supabase.from('profiles').select('*').eq('id',userId).single().then(({data})=>setProfile(data as Profile))},[userId])
+  async function save(e:FormEvent<HTMLFormElement>){e.preventDefault();const d=new FormData(e.currentTarget);const {error}=await supabase.from('profiles').update({display_name:d.get('display_name'),country:d.get('country'),about:d.get('about'),interests:String(d.get('interests')||'').split(',').map(x=>x.trim()).filter(Boolean),updated_at:new Date().toISOString()}).eq('id',userId);if(!error)setSaved(true)}
+  return <div className="feature-overlay"><section className="profile-window"><header><div><h2>Your profile</h2><p>Help the right people connect with you.</p></div><button onClick={onClose}><X/></button></header>{profile&&<form onSubmit={save}><label>Display name<input name="display_name" defaultValue={profile.display_name||profile.full_name}/></label><label>Country<input name="country" defaultValue={profile.country||''}/></label><label>About me<textarea name="about" defaultValue={profile.about} placeholder="Share a little about yourself…"/></label><label>Interests <small>Separate with commas</small><input name="interests" defaultValue={(profile.interests||[]).join(', ')}/></label><button className="save-profile">{saved?'Saved ✓':'Save profile'}</button></form>}</section></div>
+}
+
+export function Notifications({userId,onClose}:{userId:string;onClose:()=>void}){
+  const [items,setItems]=useState<Notice[]>([])
+  const load=()=>supabase.from('notifications').select('*').eq('user_id',userId).order('created_at',{ascending:false}).limit(30).then(({data})=>setItems((data as Notice[])||[]))
+  useEffect(()=>{load();const c=supabase.channel(`notices-${userId}`).on('postgres_changes',{event:'INSERT',schema:'public',table:'notifications',filter:`user_id=eq.${userId}`},()=>load()).subscribe();return()=>{supabase.removeChannel(c)}},[userId])
+  async function open(n:Notice){await supabase.from('notifications').update({read_at:new Date().toISOString()}).eq('id',n.id);if(n.type==='video_invite'&&n.entity_id){await supabase.from('video_sessions').update({status:'active',started_at:new Date().toISOString()}).eq('id',n.entity_id);window.open(`https://meet.jit.si/NovaResort-${n.entity_id}`,'_blank','noopener,noreferrer')}load()}
+  return <div className="feature-overlay"><section className="notification-window"><header><div><h2>Notifications</h2><p>Invitations and connection updates.</p></div><button onClick={onClose}><X/></button></header>{items.length===0?<div className="empty-state"><Bell/><h3>You’re all caught up</h3></div>:items.map(n=><button className={n.read_at?'notice read':'notice'} key={n.id} onClick={()=>open(n)}><span>{n.type==='video_invite'?<Video/>:<Heart/>}</span><div><b>{n.title}</b><p>{n.body}</p><small>{new Date(n.created_at).toLocaleString()}</small></div></button>)}</section></div>
+}
