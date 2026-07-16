@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import {
   Bell, CalendarDays, ChevronDown, ChevronRight, CircleUserRound, Clock3,
   Compass, Heart, Home, Leaf, LockKeyhole, Menu, MessageCircleMore, MoreHorizontal,
   Search, Send, Settings, ShieldCheck, Sparkles, UsersRound, Video, X, Moon, Sun
 } from 'lucide-react'
+import type { Session } from '@supabase/supabase-js'
+import { supabase } from './supabase'
 
 type Room = {
   title: string; description: string; people: number; color: string; icon: string; tags: string[]
@@ -31,13 +33,80 @@ function Logo() {
   return <div className="logo"><div className="logo-mark"><Leaf size={20} /><Sparkles size={10} /></div><div><b>nova</b><span>resort</span></div></div>
 }
 
+function AuthScreen() {
+  const [mode, setMode] = useState<'login'|'register'|'reset'>('login')
+  const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget)
+    const email = String(data.get('email') || '').trim()
+    const password = String(data.get('password') || '')
+    setLoading(true); setError(''); setMessage('')
+    try {
+      if (mode === 'register') {
+        const fullName = String(data.get('fullName') || '').trim()
+        if (password !== String(data.get('confirmPassword') || '')) throw new Error('Passwords do not match.')
+        if (!data.get('guidelines')) throw new Error('Please accept the community guidelines.')
+        const { error } = await supabase.auth.signUp({ email, password, options: {
+          emailRedirectTo: 'https://shirkan84.github.io/NovaResort/',
+          data: { full_name: fullName, profile_type: data.get('profileType'), country: data.get('country') }
+        }})
+        if (error) throw error
+        setMessage('Welcome to Nova Resort. Please check your email to verify your account.')
+      } else if (mode === 'reset') {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: 'https://shirkan84.github.io/NovaResort/' })
+        if (error) throw error
+        setMessage('Password reset instructions have been sent to your email.')
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        if (error) throw error
+      }
+    } catch (e) { setError(e instanceof Error ? e.message : 'Something went wrong. Please try again.') }
+    finally { setLoading(false) }
+  }
+
+  return <div className="auth-page">
+    <div className="auth-brand"><Logo/><div className="auth-hero-copy"><span className="auth-kicker"><Sparkles size={13}/> A SAFE SPACE TO BE HUMAN</span><h1>Connection can be<br/><em>part of the healing.</em></h1><p>Talk, listen, and grow in a thoughtful community built around emotional wellbeing and meaningful human connection.</p><div className="auth-values"><span><Heart/>Kind connection</span><span><ShieldCheck/>Safety first</span><span><Leaf/>Space to grow</span></div></div><p className="auth-disclaimer">Nova Resort is a peer-support community and is not a substitute for professional or emergency services.</p></div>
+    <div className="auth-panel"><div className="auth-mobile-logo"><Logo/></div><div className="auth-form-wrap"><span className="welcome-icon"><Leaf size={22}/></span>
+      <h2>{mode === 'register' ? 'Create your account' : mode === 'reset' ? 'Reset your password' : 'Welcome to Nova Resort'}</h2>
+      <p>{mode === 'register' ? 'Join a community where you can feel seen and supported.' : mode === 'reset' ? 'We’ll send a secure reset link to your email.' : 'Sign in to return to your community.'}</p>
+      {message && <div className="form-message success"><ShieldCheck size={17}/>{message}</div>}{error && <div className="form-message error">{error}</div>}
+      <form onSubmit={submit}>
+        {mode === 'register' && <><label>Full name<input name="fullName" required placeholder="Your full name"/></label><div className="form-row"><label>Country<input name="country" required placeholder="Your country"/></label><label>Profile type<select name="profileType"><option value="member">Community member</option><option value="healer">Healer / Therapist</option></select></label></div></>}
+        <label>Email address<input type="email" name="email" required placeholder="you@example.com"/></label>
+        {mode !== 'reset' && <label>Password<input type="password" name="password" required minLength={8} placeholder="At least 8 characters"/></label>}
+        {mode === 'register' && <><label>Confirm password<input type="password" name="confirmPassword" required minLength={8} placeholder="Repeat your password"/></label><label className="check-label"><input type="checkbox" name="guidelines"/>I agree to the Community Guidelines and Privacy Policy.</label></>}
+        {mode === 'login' && <button type="button" className="forgot" onClick={() => {setMode('reset');setError('');setMessage('')}}>Forgot password?</button>}
+        <button className="auth-submit" disabled={loading}>{loading ? 'Please wait…' : mode === 'register' ? 'Create account' : mode === 'reset' ? 'Send reset link' : 'Sign in'}<ChevronRight size={17}/></button>
+      </form>
+      <div className="auth-switch">{mode === 'login' ? <>New to Nova Resort? <button onClick={() => setMode('register')}>Create an account</button></> : <>Already have an account? <button onClick={() => setMode('login')}>Sign in</button></>}</div>
+    </div></div>
+  </div>
+}
+
 function App() {
+  const [session, setSession] = useState<Session | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
   const [dark, setDark] = useState(false)
   const [notice, setNotice] = useState('')
   const [activeNav, setActiveNav] = useState('Home')
 
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => { setSession(data.session); setAuthLoading(false) })
+    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession))
+    return () => data.subscription.unsubscribe()
+  }, [])
+
   const act = (text: string) => { setNotice(text); window.setTimeout(() => setNotice(''), 2800) }
+
+  if (authLoading) return <div className="auth-loader"><Logo/><span/></div>
+  if (!session) return <AuthScreen/>
+  const name = session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Member'
+  const initials = name.split(' ').map((part: string) => part[0]).join('').slice(0,2).toUpperCase()
 
   return <div className={dark ? 'app dark' : 'app'}>
     <aside className={menuOpen ? 'sidebar open' : 'sidebar'}>
@@ -55,7 +124,8 @@ function App() {
       </div>
       <div className="side-bottom">
         <button className="nav-item" onClick={() => act('Settings opened')}><Settings size={19}/><span>Settings</span></button>
-        <button className="profile-mini" onClick={() => act('Profile opened')}><div className="avatar user">SK</div><div><b>Shir Kanevsky</b><span>Community member</span></div><MoreHorizontal size={18}/></button>
+        <button className="profile-mini" onClick={() => act('Profile opened')}><div className="avatar user">{initials}</div><div><b>{name}</b><span>Community member</span></div><MoreHorizontal size={18}/></button>
+        <button className="signout" onClick={() => supabase.auth.signOut()}>Sign out</button>
       </div>
     </aside>
 
@@ -67,13 +137,13 @@ function App() {
         <div className="header-actions">
           <button className="icon-btn" aria-label="Toggle theme" onClick={() => setDark(!dark)}>{dark ? <Sun size={19}/> : <Moon size={19}/>}</button>
           <button className="icon-btn notification" aria-label="Notifications" onClick={() => act('You have 3 new notifications')}><Bell size={20}/><i>3</i></button>
-          <button className="user-chip"><div className="avatar user">SK</div><ChevronDown size={15}/></button>
+          <button className="user-chip"><div className="avatar user">{initials}</div><ChevronDown size={15}/></button>
         </div>
       </header>
 
       <div className="content">
         <section className="welcome">
-          <div><p className="eyebrow">THURSDAY, JULY 16</p><h1>Good morning, Shir <span>✦</span></h1><p>Take a breath. You’re in a place where you can simply be.</p></div>
+          <div><p className="eyebrow">WELCOME TO NOVA RESORT</p><h1>Good to see you, {name.split(' ')[0]} <span>✦</span></h1><p>Take a breath. You’re in a place where you can simply be.</p></div>
           <button className="primary" onClick={() => act('Discovering community rooms')}><Compass size={17}/> Explore the community</button>
         </section>
 
