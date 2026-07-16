@@ -2,11 +2,12 @@ import { FormEvent, useEffect, useState } from 'react'
 import {
   Bell, CalendarDays, ChevronDown, ChevronRight, CircleUserRound, Clock3,
   Compass, Heart, Home, Leaf, LockKeyhole, Menu, MessageCircleMore, MoreHorizontal,
-  Search, Send, Settings, ShieldCheck, Sparkles, UsersRound, Video, X, Moon, Sun
+  Search, Send, Settings, ShieldCheck, Sparkles, UsersRound, Video, X, Moon, Sun, Languages
 } from 'lucide-react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import { ChatRoom, DbRoom, EditProfile, Notifications, PeopleDirectory } from './CommunityFeatures'
+import { applyLanguage, getLanguage, switchLanguage } from './i18n'
 
 type Room = {
   title: string; description: string; people: number; color: string; icon: string; tags: string[]
@@ -35,6 +36,7 @@ function Logo() {
 }
 
 function AuthScreen() {
+  const language = getLanguage()
   const [mode, setMode] = useState<'login'|'register'|'reset'>('login')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
@@ -69,7 +71,7 @@ function AuthScreen() {
     finally { setLoading(false) }
   }
 
-  return <div className="auth-page">
+  return <div className="auth-page"><button className="language-toggle auth-language" onClick={()=>switchLanguage(language==='en'?'he':'en')}><Languages/>{language==='en'?'עברית':'English'}</button>
     <div className="auth-brand"><Logo/><div className="auth-hero-copy"><span className="auth-kicker"><Sparkles size={13}/> A SAFE SPACE TO BE HUMAN</span><h1>Connection can be<br/><em>part of the healing.</em></h1><p>Talk, listen, and grow in a thoughtful community built around emotional wellbeing and meaningful human connection.</p><div className="auth-values"><span><Heart/>Kind connection</span><span><ShieldCheck/>Safety first</span><span><Leaf/>Space to grow</span></div></div><p className="auth-disclaimer">Nova Resort is a peer-support community and is not a substitute for professional or emergency services.</p></div>
     <div className="auth-panel"><div className="auth-mobile-logo"><Logo/></div><div className="auth-form-wrap"><span className="welcome-icon"><Leaf size={22}/></span>
       <h2>{mode === 'register' ? 'Create your account' : mode === 'reset' ? 'Reset your password' : 'Welcome to Nova Resort'}</h2>
@@ -89,6 +91,7 @@ function AuthScreen() {
 }
 
 function App() {
+  const language = getLanguage()
   const [session, setSession] = useState<Session | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -104,6 +107,7 @@ function App() {
     const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession))
     return () => data.subscription.unsubscribe()
   }, [])
+  useEffect(() => applyLanguage(language), [language])
   useEffect(() => {
     if (!session) return
     supabase.from('rooms').select('id,name,description,icon,theme,is_private').eq('is_private',false).limit(6).then(({data}) => setDbRooms((data as DbRoom[]) || []))
@@ -143,6 +147,7 @@ function App() {
         <div className="mobile-logo"><Logo/></div>
         <div className="search"><Search size={18}/><input aria-label="Search" placeholder="Search people, rooms, or topics..."/><span>⌘ K</span></div>
         <div className="header-actions">
+          <button className="language-toggle" onClick={()=>switchLanguage(language==='en'?'he':'en')}><Languages size={17}/>{language==='en'?'עברית':'English'}</button>
           <button className="icon-btn" aria-label="Toggle theme" onClick={() => setDark(!dark)}>{dark ? <Sun size={19}/> : <Moon size={19}/>}</button>
           <button className="icon-btn notification" aria-label="Notifications" onClick={() => setFeature('notifications')}><Bell size={20}/><i>3</i></button>
           <button className="user-chip"><div className="avatar user">{initials}</div><ChevronDown size={15}/></button>
