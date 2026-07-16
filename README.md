@@ -32,4 +32,6 @@ The included GitHub Actions workflow builds and publishes the site to GitHub Pag
 
 Run [`supabase/schema.sql`](supabase/schema.sql) once in the Supabase SQL Editor. It creates the application tables, starter community rooms, user-profile trigger, real-time publications, and row-level security policies required by the live community features.
 
+Then run [`supabase/profile-media-and-live-data.sql`](supabase/profile-media-and-live-data.sql) to enable secure profile photos, live presence data, and reusable private rooms limited to two participants.
+
 > Nova Resort is a peer-support and wellness community concept. It is not a substitute for medical, psychological, psychiatric, or emergency services.
