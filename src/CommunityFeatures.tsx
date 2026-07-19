@@ -3,121 +3,125 @@ import { Bell, Camera, Check, ChevronLeft, Heart, MessageCircleMore, Send, Users
 import { supabase } from './supabase'
 import './community-lobby.css'
 
-export type DbRoom = { id:string; name:string; description:string; icon:string; theme:string; is_private:boolean; tags?:string[]; total_members?:number; online_members?:number; pinned_message?:string|null; last_activity?:string|null }
+export type DbRoom = { id:string; name:string; description:string; icon:string; theme:string; is_private:boolean; tags?:string[]; total_members?:number; online_members?:number }
 type Profile = { id:string; full_name:string; display_name:string|null; avatar_url:string|null; country:string|null; profile_type:string; about:string; interests:string[]; specialties:string[]; online:boolean }
 type Message = { id:string; body:string; sender_id:string; created_at:string; edited_at?:string|null; reply_to?:string|null; pinned?:boolean; profiles?:{full_name:string;avatar_url:string|null}|null }
 type Reaction = { message_id:string; emoji:string; user_id:string }
+type Friendship = { id:string; requester_id:string; addressee_id:string; status:string }
 type Notice = { id:string; type:string; title:string; body:string|null; entity_id:string|null; read_at:string|null; created_at:string }
-type Friendship = { id:string; requester_id:string; addressee_id:string; status:string; created_at:string; updated_at:string }
-type BlockedUser = { blocked_id:string; profiles?:Profile|null }
 
 const QUICK_REACTIONS = ['❤️','🙏','🌿','✨']
-
-function isLikelySpam(body:string) {
-  const text = body.toLowerCase()
-  const links = (text.match(/https?:\/\//g) || []).length
-  const repeated = /(.)\1{18,}/.test(text)
-  const bait = /(free money|crypto giveaway|click here now|earn \$|telegram.me|whatsapp group)/i.test(text)
-  return links > 2 || repeated || bait
-}
-
-function initials(name?:string|null) {
-  return (name || 'N').split(' ').map(x => x[0]).join('').slice(0,2)
-}
-
-function connectionFor(personId:string, friendships:Friendship[]) {
-  return friendships.find(f => f.requester_id === personId || f.addressee_id === personId)
-}
-
-function connectionState(userId:string, personId:string, friendships:Friendship[], blocked:string[]) {
-  if (blocked.includes(personId)) return 'blocked'
-  const connection = connectionFor(personId, friendships)
-  if (!connection) return 'none'
-  if (connection.status === 'accepted') return 'accepted'
-  if (connection.status === 'pending' && connection.requester_id === userId) return 'sent'
-  if (connection.status === 'pending' && connection.addres_id === userId) return 'incoming'
+const initials = (name?:string|null) => (name || 'N').split(' ').map(x=>x[0]).join('').slice(0,2)
+const connectionFor = (id:string, rows:Friendship[]) => rows.find(f=>f.requester_id===id||f.addressee_id===id)
+function stateFor(userId:string, id:string, rows:Friendship[], blocked:string[]) {
+  if(blocked.includes(id)) return 'blocked'
+  const row=connectionFor(id,rows)
+  if(!row) return 'none'
+  if(row.status==='accepted') return 'accepted'
+  if(row.status==='pending'&&row.requester_id===userId) return 'sent'
+  if(row.status==='pending'&&row.addressee_id===userId) return 'incoming'
   return 'none'
 }
+function spam(body:string){const t=body.toLowerCase();return (t.match(/https?:\/\//g)||[]).length>2||/(.)\1{18,}/.test(t)||/(free money|crypto giveaway|click here now|earn \$|telegram.me|whatsapp group)/i.test(t)}
 
 function ConnectButton({userId,person,friendships,blocked,onChanged}:{userId:string;person:Profile;friendships:Friendship[];blocked:string[];onChanged:()=>void}) {
   const [busy,setBusy]=useState(false),[error,setError]=useState('')
-  const relationship=connectionFor(person.id,friendships)
-  const state=connectionState(userId,person.id,friendships,blocked)
-  async function run(action:()=>any) {
-    setBusy(true);setError('')
-    const result=await action()
-    setBusy(false)
-    if(result?.error)setError(result.error.message || 'Connect action failed.')
-    else onChanged()
-  }
+  const row=connectionFor(person.id,friendships), state=stateFor(userId,person.id,friendships,blocked)
+  async function run(call:()=>any){setBusy(true);setError('');const result=await call();setBusy(false);if(result?.error)setError(result.error.message||'Connect action failed.');else onChanged()}
   if(person.id===userId)return <button disabled>Connect unavailable</button>
   if(state==='blocked')return <button disabled>Blocked</button>
-  return <span className="connect-control">{state==='none'&&<button disabled={busy} onClick={()=>run(()=>supabase.rpc('send_connection_request',{other_user:person.id}))}>{busy?'Sending…':'Connect'}</button>}{state==='sent'&&<button disabled={busy||!relationship} onClick={()=>relationship&&run(()=>supabase.rpc('cancel_connection_request',{request_id:relationship.id}))}>Request sent</button>}{state==='incoming'&&<><button disabled={busy||!relationship} onClick={()=>relationship&&run(()=>supabase.rpc('respond_connection_request',{request_id:relationship.id,next_status:'accepted'}))}>Accept connection</button><button disabled={busy||!relationship} onClick={()=>relationship&&run(()=>supabase.rpc('respond_connection_request',{request_id:relationship.id,next_status:'declined'}))}>Decline</button></>}{state==='accepted'&&<button disabled={busy||!relationship} onClick={()=>relationship&&window.confirm('Remove this connection?')&&run(()=>supabase.rpc('remove_connection',{request_id:relationship.id}))}>Connected</button>}{error&&<small>{error}</small>}</span>
+  return <span className="connect-control">
+    {state==='none'&&<button disabled={busy} onClick={()=>run(()=>supabase.rpc('send_connection_request',{other_user:person.id}))}>{busy?'Sending…':'Connect'}</button>}
+    {state==='sent'&&<button disabled={busy||!row} onClick={()=>row&&run(()=>supabase.rpc('cancel_connection_request',{request_id:row.id}))}>Request sent</button>}
+    {state==='incoming'&&<><button disabled={busy||!row} onClick={()=>row&&run(()=>supabase.rpc('respond_connection_request',{request_id:row.id,next_status:'accepted'}))}>Accept connection</button><button disabled={busy||!row} onClick={()=>row&&run(()=>supabase.rpc('respond_connection_request',{request_id:row.id,next_status:'declined'}))}>Decline</button></>}
+    {state==='accepted'&&<button disabled={busy||!row} onClick={()=>row&&window.confirm('Remove this connection?')&&run(()=>supabase.rpc('remove_connection',{request_id:row.id}))}>Connected</button>}
+    {error&&<small>{error}</small>}
+  </span>
 }
 
 export function ChatRoom({ room, userId, onClose }:{room:DbRoom;userId:string;onClose:()=>void}) {
-  const [messages,setMessages]=useState<Message[]>([]), [reactions,setReactions]=useState<Reaction[]>([]), [text,setText]=useState(''), [loading,setLoading]=useState(true), [error,setError]=useState('')
-  const [replyTo,setReplyTo]=useState<Message|null>(null), [editing,setEditing]=useState<Message|null>(null), [editText,setEditText]=useState(''), [muted,setMuted]=useState<string[]>([])
-  const [typingUsers,setTypingUsers]=useState<string[]>([]), [unread,setUnread]=useState(0)
-  const bottom=useRef<HTMLDivElement>(null), listRef=useRef<HTMLDivElement>(null), presenceRef=useRef<any>(null), typingTimer=useRef<number|null>(null)
-
-  const nearBottom = () => {
-    const el = listRef.current
-    return !el || el.scrollHeight - el.scrollTop - el.clientHeight < 80
-  }
-
-  const loadMessages = useCallback(async (showLoading=false) => {
-    if (showLoading) setLoading(true)
-    setError('')
-    const {data,error}=await supabase.from('messages').select('id,body,sender_id,created_at,edited_at,reply_to,pinned,profiles!messages_sender_id_fkey(full_name,avatar_url)').eq('room_id',room.id).is('deleted_at',null).order('created_at').limit(200)
-    if(error){setError(error.message);setLoading(false);return}
-    const rows=(data as unknown as Message[])||[]
-    setMessages(rows)
-    if(rows.length){
-      const {data:reactionRows}=await supabase.from('message_reactions').select('message_id,emoji,user_id').in('message_id',rows.map(m=>m.id))
-      setReactions((reactionRows as Reaction[])||[])
-    } else setReactions([])
-    setLoading(false)
-  },[room.id])
-
-  useEffect(()=>{
-    setMessages([]);setReactions([]);setUnread(0);setReplyTo(null);setEditing(null)
-    loadMessages(true)
-    const channel=supabase.channel(`room-${room.id}`,{config:{presence:{key:userId}}})
-      .on('postgres_changes',{event:'*',schema:'public',table:'messages',filter:`room_id=eq.${room.id}`},()=>{ if(!nearBottom())setUnread(x=>x+1); loadMessages() })
-      .on('presence',{event:'sync'},()=>{
-        const state=channel.presenceState() as Record<string, any[]>
-        const names=Object.entries(state).filter(([id])=>id!==userId).flatMap(([,metas])=>metas.filter(m=>m.typing).map(m=>m.name || 'Someone'))
-        setTypingUsers([...new Set(names)])
-      })
-      .subscribe(async status=>{ if(status==='SUBSCRIBED') await channel.track({typing:false,name:'Member'}) })
-    presenceRef.current=channel
-    return()=>{supabase.removeChannel(channel)}
-  },[room.id,userId,loadMessages])
-
-  useEffect(()=>{ if(nearBottom()){bottom.current?.scrollIntoView({behavior:'smooth'});setUnread(0)} },[messages])
-
-  function updateText(value:string) {
-    setText(value)
-    presenceRef.current?.track({typing:value.trim().length>0,name:'Member'})
-    if(typingTimer.current) window.clearTimeout(typingTimer.current)
-    typingTimer.current=window.setTimeout(()=>presenceRef.current?.track({typing:false,name:'Member'}),1200)
-  }
-
-  function reactionCounts(messageId:string) {
-    return QUICK_REACTIONS.map(emoji=>({emoji,count:reactions.filter(r=>r.message_id===messageId&&r.emoji===emoji).length,me:reactions.some(r=>r.message_id===messageId&&r.emoji===emoji&&r.user_id===userId)}))
-  }
-
-  async function send(e:FormEvent){e.preventDefault();const body=text.trim();if(!body)return;if(isLikelySpam(body)){setError('This looks like spam. Please rewrite it in a calmer, more personal way.');return}setText('');setError('');const {error}=await supabase.from('messages').insert({room_id:room.id,sender_id:userId,body,reply_to:replyTo?.id||null});if(error){setError(error.message);setText(body)}else{setReplyTo(null);presenceRef.current?.track({typing:false,name:'Member'})}}
-  async function saveEdit(e:FormEvent){e.preventDefault();if(!editing)return;const body=editText.trim();if(!body||isLikelySpam(body))return;const {error}=await supabase.from('messages').update({body,edited_at:new Date().toISOString()}).eq('id',editing.id).eq('sender_id',userId);if(error)setError(error.message);else{setEditing(null);setEditText('');loadMessages()}}
-  async function deleteMessage(m:Message){const {error}=await supabase.from('messages').update({deleted_at:new Date().toISOString(),body:'Message deleted'}).eq('id',m.id).eq('sender_id',userId);if(error)setError(error.message);else loadMessages()}
-  async function react(m:Message, emoji:string){await supabase.from('message_reactions').upsert({message_id:m.id,user_id:userId,emoji},{onConflict:'message_id,user_id,emoji'});loadMessages()}
-  async function pin(m:Message){const {error}=await supabase.from('messages').update({pinned:!m.pinned,pinned_by:userId,pinned_at:!m.pinned?new Date().toISOString():null}).eq('id',m.id).eq('sender_id',userId);if(error)setError(error.message);else loadMessages()}
-  async function report(m:Message){const reason=window.prompt('Tell the moderators what felt unsafe about this message.');if(!reason)return;const {error}=await supabase.from('message_reports').insert({message_id:m.id,reporter_id:userId,reason});alert(error?error.message:'Thank you. The message was reported.')}
-  async function block(senderId:string){await supabase.from('user_blocks').insert({blocker_id:userId,blocked_id:senderId});setMuted(x=>[...new Set([...x,senderId])])}
+  const [messages,setMessages]=useState<Message[]>([]),[reactions,setReactions]=useState<Reaction[]>([]),[text,setText]=useState(''),[error,setError]=useState(''),[loading,setLoading]=useState(true)
+  const [replyTo,setReplyTo]=useState<Message|null>(null),[editing,setEditing]=useState<Message|null>(null),[editText,setEditText]=useState(''),[muted,setMuted]=useState<string[]>([]),[typing,setTyping]=useState<string[]>([]),[unread,setUnread]=useState(0)
+  const bottom=useRef<HTMLDivElement>(null),listRef=useRef<HTMLDivElement>(null),channelRef=useRef<any>(null),typingTimer=useRef<number|null>(null)
+  const nearBottom=()=>{const el=listRef.current;return !el||el.scrollHeight-el.scrollTop-el.clientHeight<80}
+  const load=useCallback(async(show=false)=>{if(show)setLoading(true);const {data,error}=await supabase.from('messages').select('id,body,sender_id,created_at,edited_at,reply_to,pinned,profiles!messages_sender_id_fkey(full_name,avatar_url)').eq('room_id',room.id).is('deleted_at',null).order('created_at').limit(200);if(error){setError(error.message);setLoading(false);return}const rows=(data as unknown as Message[])||[];setMessages(rows);if(rows.length){const {data:r}=await supabase.from('message_reactions').select('message_id,emoji,user_id').in('message_id',rows.map(m=>m.id));setReactions((r as Reaction[])||[])}else setReactions([]);setLoading(false)},[room.id])
+  useEffect(()=>{setMessages([]);setUnread(0);load(true);const c=supabase.channel(`room-${room.id}`,{config:{presence:{key:userId}}}).on('postgres_changes',{event:'*',schema:'public',table:'messages',filter:`room_id=eq.${room.id}`},()=>{if(!nearBottom())setUnread(x=>x+1);load()}).on('presence',{event:'sync'},()=>{const s=c.presenceState() as Record<string,any[]>;setTyping(Object.entries(s).filter(([id])=>id!==userId).flatMap(([,v])=>v.filter(m=>m.typing).map(m=>m.name||'Someone')))}).subscribe(async status=>{if(status==='SUBSCRIBED')await c.track({typing:false,name:'Member'})});channelRef.current=c;return()=>{supabase.removeChannel(c)}},[room.id,userId,load])
+  useEffect(()=>{if(nearBottom()){bottom.current?.scrollIntoView({behavior:'smooth'});setUnread(0)}},[messages])
+  function updateText(v:string){setText(v);channelRef.current?.track({typing:Boolean(v.trim()),name:'Member'});if(typingTimer.current)window.clearTimeout(typingTimer.current);typingTimer.current=window.setTimeout(()=>channelRef.current?.track({typing:false,name:'Member'}),1200)}
+  const counts=(id:string,emoji:string)=>({count:reactions.filter(r=>r.message_id===id&&r.emoji===emoji).length,me:reactions.some(r=>r.message_id===id&&r.emoji===emoji&&r.user_id===userId)})
+  async function send(e:FormEvent){e.preventDefault();const body=text.trim();if(!body)return;if(spam(body)){setError('This looks like spam. Please rewrite it in a calmer, more personal way.');return}setText('');const {error}=await supabase.from('messages').insert({room_id:room.id,sender_id:userId,body,reply_to:replyTo?.id||null});if(error){setError(error.message);setText(body)}else setReplyTo(null)}
+  async function saveEdit(e:FormEvent){e.preventDefault();if(!editing)return;const body=editText.trim();if(!body||spam(body))return;const {error}=await supabase.from('messages').update({body,edited_at:new Date().toISOString()}).eq('id',editing.id).eq('sender_id',userId);if(error)setError(error.message);else{setEditing(null);load()}}
+  async function remove(m:Message){const {error}=await supabase.from('messages').update({deleted_at:new Date().toISOString(),body:'Message deleted'}).eq('id',m.id).eq('sender_id',userId);if(error)setError(error.message);else load()}
+  async function react(m:Message,emoji:string){await supabase.from('message_reactions').upsert({message_id:m.id,user_id:userId,emoji},{onConflict:'message_id,user_id,emoji'});load()}
+  async function report(m:Message){const reason=window.prompt('Tell the moderators what felt unsafe about this message.');if(reason)await supabase.from('message_reports').insert({message_id:m.id,reporter_id:userId,reason})}
   async function leave(){await supabase.from('room_members').delete().eq('room_id',room.id).eq('user_id',userId);onClose()}
+  const visible=messages.filter(m=>!muted.includes(m.sender_id)),pinned=messages.find(m=>m.pinned)
+  return <div className="feature-overlay"><section className="chat-window"><header><button onClick={onClose}><ChevronLeft/></button><div className={`chat-room-icon ${room.theme}`}>{room.icon}</div><div><h2>{room.name}</h2><span><i/> {room.is_private?'Private room for 2 users':`${room.online_members||0} online · ${room.total_members||0} members`} · Be kind</span></div><button onClick={onClose}><X/></button></header><div className="safety-strip"><button onClick={()=>alert('Community guidelines: be respectful, protect privacy, no harassment, no spam, and report harmful behavior.')}>Community Guidelines</button><button onClick={leave}>Leave room</button><span>{room.is_private?'Only you and the other selected member can open this room.':'This is a peer-support space. Protect your privacy and report harmful behaviour.'}</span></div>{pinned&&<div className="pinned-message"><b>Moderator announcement</b><span>{pinned.body}</span></div>}<div className="message-list" ref={listRef} onScroll={()=>nearBottom()&&setUnread(0)}>{loading?<p className="empty-state">Opening the room…</p>:error?<div className="empty-state"><MessageCircleMore/><h3>Room unavailable</h3><p>{error}</p></div>:visible.length===0?<div className="empty-state"><MessageCircleMore/><h3>Start the conversation</h3><p>Be the first to share something kind or meaningful.</p></div>:visible.map(m=>{const reply=messages.find(x=>x.id===m.reply_to);return <div key={m.id} className={m.sender_id===userId?'chat-message mine':'chat-message'}><span>{m.profiles?.avatar_url?<img src={m.profiles.avatar_url} alt=""/>:initials(m.profiles?.full_name)}</span><div>{reply&&<em className="reply-preview">Replying to {reply.sender_id===userId?'you':reply.profiles?.full_name||'member'}: {reply.body.slice(0,80)}</em>}<b>{m.sender_id===userId?'You':m.profiles?.full_name||'Member'} <small>{new Date(m.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}{m.edited_at?' · edited':''}</small></b><p>{m.body}</p><div className="message-actions">{QUICK_REACTIONS.map(e=>{const c=counts(m.id,e);return <button key={e} className={c.me?'active':''} onClick={()=>react(m,e)}>{e} {c.count||''}</button>})}<button onClick={()=>setReplyTo(m)}>Reply</button>{m.sender_id===userId&&<button onClick={()=>{setEditing(m);setEditText(m.body)}}>Edit</button>}{m.sender_id===userId&&<button onClick={()=>remove(m)}>Delete</button>}{m.sender_id!==userId&&<button onClick={()=>report(m)}>Report</button>}{m.sender_id!==userId&&<button onClick={()=>setMuted(x=>[...new Set([...x,m.sender_id])])}>Mute</button>}</div></div></div>})}<div ref={bottom}/></div>{unread>0&&<button className="unread-pill" onClick={()=>bottom.current?.scrollIntoView({behavior:'smooth'})}>{unread} new</button>}{typing.length>0&&<div className="typing-indicator">{typing.slice(0,2).join(', ')} typing…</div>}{replyTo&&<div className="compose-context">Replying to {replyTo.sender_id===userId?'your message':replyTo.profiles?.full_name||'member'} <button onClick={()=>setReplyTo(null)}>Cancel</button></div>}{editing&&<form className="message-compose edit-compose" onSubmit={saveEdit}><input value={editText} onChange={e=>setEditText(e.target.value)} maxLength={4000} autoFocus/><button aria-label="Save"><Check/></button><button type="button" onClick={()=>setEditing(null)} aria-label="Cancel"><X/></button></form>}<form className="message-compose" onSubmit={send}><input value={text} onChange={e=>updateText(e.target.value)} maxLength={4000} placeholder="Write a supportive message…"/><button aria-label="Send"><Send/></button></form></section></div>
+}
 
-  const pinned=messages.find(m=>m.pinned)
-  const visible=messages.filter(m=>!muted.includes(m.sender_id))
-  return <div className="feature-overlay"><section className="chat-window"><header><button onClick={onClose}><ChevronLeft/></button><div className={`chat-room-icon ${room.theme}`}>{room.icon}</div><div><h2>{room.name}</h2><span><i/> {room.is_private?'Private room for 2 users':`${room.online_members||0} online · ${room.total_members||0} members`} · Be kind</span></div><button onClick={onClose}><X/></button></header><div className="safety-strip"><button onClick={()=>alert('Community guidelines: be respectful, protect privacy, no harassment, no spam, and report harmful behavior.')}>Community Guidelines</button><button onClick={leave}>Leave room</button><span>{room.is_private?'Only you and the other selected member can open this room.':'This is a peer-support space. Protect your privacy and report harmful behaviour.'}</span></div>{pinned&&<div className="pinned-message"><b>Moderator announcement</b><span>{pinned.body}</span></div>}<div className="message-list" ref={listRef} onScroll={()=>{if(nearBottom())setUnread(0)}}>{loading?<p className="empty-state">Opening the room…</p>:error?<div className="empty-state"><MessageCircleMore/><h3>Room unavailable</h3><p>{error}</p></div>:visible.length===0?<div className="empty-state"><MessageCircleMore/><h3>Start the conversation</h3><p>Be the first to share something kind or meaningful.</p></div>:visible.map(m=>{const reply=messages.find(x=>x.id===m.reply_to);return <div key={m.id} className={m.sender_id===userId?'chat-message mine':'chat-message'}><span>{m.profiles?.avatar_url?<img src={m.profiles.avatar_url} alt=""/>:initials(m.profiles?.full_name)}</span><div>{reply&&<em className="reply-preview">Replying to {reply.sender_id===userId?'you':reply.profiles?.full_name||'member'}: {reply.body.slice(0,80)}</em>}<b>{m.sender_id===userId?'You':m.profiles?.full_name||'Member'} <small>{new Date(m.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}{m.edited_at?' · edited':''}</small></b><p>{m.body}</p><div className="message-actions">{QUICK_REACTIONS.map(emoji=><button key={emoji} className={reactionCounts(m.id).find(r=>r.emoji===emoji)?.me?'active':''} onClick={()=>react(m,emoji)}>{emoji} {reactionCounts(m.id).find(r=>r.emoji===emoji)?.count||''}</button>)}<button onClick={()=>setReplyTo(m)}>Reply</button>{m.sender_id===userId&&<button onClick={()=>{setEditing(m);setEditText(m.body)}}>Edit</button>}{m.sender_id===userId&&<button onClick={()=>deleteMessage(m)}>Delete</button>}{m.sender_id===userId&&<button onClick={()=>pin(m)}>{m.pinned?'Unpin':'Pin'}</button>}{m.sender_id!==userId&&<button onClick={()=>report(m)}>Report</button>}{m.sender_id!==userId&&<button onClick={()=>setMuted(x=>[...new Set([...x,m.sender_id])])}>Mute</button>}{m.sender_id!==userId&&<button onClick={()=>block(m.sender_id)}>Block</button>}</div></div></div>})}<div ref={bottom}/></div>{unread>0&&<button className="unread-pill" onClick={()=>bottom.current?.scrollIntoView({behavior:'smooth'})}>{unread} new</button>}{typingUsers.length>0&&<div className="typing-indicator">{typingUsers.slice(0,2).join(', ')} typing…</div>}{replyTo&&<div className="compose-context">Replying to {replyTo.sender_id===userId?'your message':replyTo.profiles?.full_name||'member'} <button onClick={()=>setReplyTo(null)}>Cancel</button></div>}{editing&&<form className="message-compose edit-compose" onSubmit={saveEdit}><input value={editText} onChange={e=>setEditText(e.target.value)} maxLength={4000} autoFocus/><button aria-label="Save"><Check/></button><button type="button" onClick={()=>setEditing(null)} aria-label="Cancel"><X/></button></form>}<form className="message-compose" onSubmit={send}><input value={text} onChange={e=>updateText(e.target.value)} maxLength={4000} placeholder="Write a supportive message…"/><button aria-label="Send"><Send/></button></form></section></div>
+function useConnections(userId:string){
+  const [friendships,setFriendships]=useState<Friendship[]>([]),[blocked,setBlocked]=useState<string[]>([])
+  const load=useCallback(async()=>{const [{data:f},{data:b}]=await Promise.all([supabase.from('friendships').select('id,requester_id,addressee_id,status').or(`requester_id.eq.${userId},addressee_id.eq.${userId}`).in('status',['pending','accepted']),supabase.from('user_blocks').select('blocked_id').eq('blocker_id',userId)]);setFriendships((f as Friendship[])||[]);setBlocked(((b as {blocked_id:string}[])||[]).map(x=>x.blocked_id))},[userId])
+  useEffect(()=>{load();const c=supabase.channel(`connections-hook-${userId}`).on('postgres_changes',{event:'*',schema:'public',table:'friendships'},()=>load()).on('postgres_changes',{event:'*',schema:'public',table:'user_blocks'},()=>load()).subscribe();return()=>{supabase.removeChannel(c)}},[userId,load])
+  return {friendships,blocked,load}
+}
+
+export function PeopleDirectory({userId,onClose,onOpenRoom}:{userId:string;onClose:()=>void;onOpenRoom:(room:DbRoom)=>void}){
+  const [people,setPeople]=useState<Profile[]>([]),[rooms,setRooms]=useState<DbRoom[]>([]),[query,setQuery]=useState(''),[joining,setJoining]=useState('')
+  const {friendships,blocked,load}=useConnections(userId)
+  useEffect(()=>{supabase.rpc('list_public_rooms').then(({data})=>setRooms((data as DbRoom[])||[]));supabase.from('profiles').select('id,full_name,display_name,avatar_url,country,profile_type,about,interests,specialties,online').neq('id',userId).limit(80).then(({data})=>setPeople((data as Profile[])||[]))},[userId])
+  async function joinRoom(room:DbRoom){setJoining(room.id);const {error}=await supabase.from('room_members').insert({room_id:room.id,user_id:userId});if(error&&error.code!=='23505'){alert(error.message);setJoining('');return}await supabase.from('room_user_preferences').upsert({room_id:room.id,user_id:userId,last_read_at:new Date().toISOString()},{onConflict:'room_id,user_id'});setJoining('');onClose();onOpenRoom(room)}
+  async function message(p:Profile){const {data,error}=await supabase.rpc('create_private_room',{other_user:p.id});if(error){alert(error.message);return}onClose();onOpenRoom({id:data,name:p.display_name||p.full_name,description:'Private two-person conversation',icon:'♢',theme:'sage',is_private:true})}
+  async function video(p:Profile){const {data,error}=await supabase.from('video_sessions').insert({host_id:userId,guest_id:p.id}).select('id').single();if(!error&&data){await supabase.from('notifications').insert({user_id:p.id,actor_id:userId,type:'video_invite',title:'Private video invitation',body:'You have been invited to a private wellness conversation.',entity_id:data.id});alert('Video invitation sent safely.')}}
+  const filtered=people.filter(p=>(p.display_name||p.full_name).toLowerCase().includes(query.toLowerCase())||(p.country||'').toLowerCase().includes(query.toLowerCase()))
+  return <div className="feature-overlay"><section className="directory-window community-lobby"><header><div><h2>Community Lobby</h2><p>Join peaceful public wellness rooms or connect one-to-one.</p></div><button onClick={onClose}><X/></button></header><div className="lobby-scroll"><div className="lobby-grid">{rooms.map(r=><article key={r.id} className={`room-card ${r.theme}`}><div className="room-art"><span>{r.icon}</span><i className="bubble b1"/><i className="bubble b2"/><i className="bubble b3"/></div><div className="room-info"><div className="tags"><span className="open-tag"><i/> Open</span>{(r.online_members||0)>0&&<span>LIVE</span>}{(r.tags||[]).slice(0,2).map(t=><span key={t}>{t}</span>)}</div><h3>{r.name}</h3><p>{r.description}</p><div className="lobby-stats"><span>{r.online_members||0} online</span><span>{r.total_members||0} members</span></div><div className="room-bottom"><span><MessageCircleMore/> Community room</span><button disabled={joining===r.id} onClick={()=>joinRoom(r)}>{joining===r.id?'Joining…':'Join Room'} <ChevronLeft style={{transform:'rotate(180deg)'}}/></button></div></div></article>)}</div><div className="member-section"><div><h3>Members and healers</h3><p>Find people for Connect requests and private two-person conversations.</p></div><input className="people-search" placeholder="Search by name or country…" value={query} onChange={e=>setQuery(e.target.value)}/><div className="people-list">{filtered.map(p=><article key={p.id}><span className="person-avatar">{p.avatar_url?<img src={p.avatar_url} alt=""/>:initials(p.display_name||p.full_name)}</span><div><h3>{p.display_name||p.full_name}{p.profile_type==='healer'&&<em>Healer / Therapist</em>}</h3><p>{p.country||'Nova Resort community'} · {p.about||'Here to connect and grow.'}</p></div><button title="Private message" onClick={()=>message(p)}><MessageCircleMore/></button><ConnectButton userId={userId} person={p} friendships={friendships} blocked={blocked} onChanged={load}/><button onClick={()=>video(p)}><Video/></button></article>)}</div></div></div></section></div>
+}
+
+export function Connections({userId,onClose,onOpenRoom}:{userId:string;onClose:()=>void;onOpenRoom:(room:DbRoom)=>void}) {
+  const [tab,setTab]=useState<'connections'|'incoming'|'sent'|'suggested'|'blocked'>('connections'),[people,setPeople]=useState<Profile[]>([]),[blockedRows,setBlockedRows]=useState<{blocked_id:string;profiles?:Profile|null}[]>([]),[query,setQuery]=useState(''),[loading,setLoading]=useState(true),[error,setError]=useState('')
+  const {friendships,blocked,load:loadRelations}=useConnections(userId)
+  const load=useCallback(async()=>{setLoading(true);setError('');const [{data:p,error:pe},{data:b,error:be}]=await Promise.all([supabase.from('profiles').select('id,full_name,display_name,avatar_url,country,profile_type,about,interests,specialties,online').neq('id',userId).limit(120),supabase.from('user_blocks').select('blocked_id,profiles!user_blocks_blocked_id_fkey(id,full_name,display_name,avatar_url,country,profile_type,about,interests,specialties,online)').eq('blocker_id',userId)]);if(pe||be){setError(pe?.message||be?.message||'Connections could not be loaded.');setLoading(false);return}setPeople((p as Profile[])||[]);setBlockedRows((b as any[])||[]);await loadRelations();setLoading(false)},[userId,loadRelations])
+  useEffect(()=>{load()},[load])
+  async function message(p:Profile){const {data,error}=await supabase.rpc('create_private_room',{other_user:p.id});if(error){alert(error.message);return}onClose();onOpenRoom({id:data,name:p.display_name||p.full_name,description:'Private two-person conversation',icon:'♢',theme:'sage',is_private:true})}
+  async function block(p:Profile){if(!window.confirm(`Block ${p.display_name||p.full_name}?`))return;const {error}=await supabase.rpc('block_member',{other_user:p.id});if(error)alert(error.message);else load()}
+  const byId=new Map(people.map(p=>[p.id,p])), match=(p:Profile)=>`${p.display_name||p.full_name} ${p.country||''} ${(p.interests||[]).join(' ')} ${p.profile_type}`.toLowerCase().includes(query.toLowerCase())
+  const connected=friendships.filter(f=>f.status==='accepted').map(f=>byId.get(f.requester_id===userId?f.addressee_id:f.requester_id)).filter(Boolean) as Profile[]
+  const incoming=friendships.filter(f=>f.status==='pending'&&f.addressee_id===userId).map(f=>byId.get(f.requester_id)).filter(Boolean) as Profile[]
+  const sent=friendships.filter(f=>f.status==='pending'&&f.requester_id===userId).map(f=>byId.get(f.addressee_id)).filter(Boolean) as Profile[]
+  const suggested=people.filter(p=>!connectionFor(p.id,friendships)&&!blocked.includes(p.id)).sort((a,b)=>(b.interests||[]).length-(a.interests||[]).length)
+  const blockedProfiles=blockedRows.map(r=>r.profiles).filter(Boolean) as Profile[]
+  const lists={connections:connected,incoming,sent,suggested,blocked:blockedProfiles},list=lists[tab].filter(match)
+  const tabs:[typeof tab,string,number][]=[['connections','My connections',connected.length],['incoming','Incoming requests',incoming.length],['sent','Sent requests',sent.length],['suggested','Suggested connections',suggested.length],['blocked','Blocked users',blockedProfiles.length]]
+  return <div className="feature-overlay"><section className="directory-window connections-window"><header><div><h2>Connections</h2><p>Manage Connect requests, trusted relationships, and blocked users.</p></div><button onClick={onClose}><X/></button></header><div className="connection-tabs">{tabs.map(([id,label,count])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}>{label}<span>{count}</span></button>)}</div><input className="people-search" placeholder="Search by name, country, interests, or profile type…" value={query} onChange={e=>setQuery(e.target.value)}/>{loading?<div className="empty-state">Loading connections…</div>:error?<div className="empty-state"><MessageCircleMore/><h3>Connections unavailable</h3><p>{error}</p></div>:list.length===0?<div className="empty-state"><UsersRound/><h3>No results</h3><p>{tab==='suggested'?'Suggestions appear from real member profiles when available.':'Nothing in this list yet.'}</p></div>:<div className="people-list">{list.map(p=><article key={p.id}><span className="person-avatar">{p.avatar_url?<img src={p.avatar_url} alt=""/>:initials(p.display_name||p.full_name)}</span><div><h3>{p.display_name||p.full_name}{p.profile_type==='healer'&&<em>Healer / Therapist</em>}</h3><p>{p.country||'Nova Resort community'} · {(p.interests||[]).slice(0,3).join(', ')||p.about||'Open to meaningful wellness connection.'}</p></div>{tab!=='blocked'&&<button title="Private message" onClick={()=>message(p)}><MessageCircleMore/></button>}{tab!=='blocked'&&<ConnectButton userId={userId} person={p} friendships={friendships} blocked={blocked} onChanged={load}/>}<button onClick={()=>block(p)}>{tab==='blocked'?'Blocked':'Block'}</button></article>)}</div>}</section></div>
+}
+
+type PrivateRoom = DbRoom & { avatar_url:string|null;last_message:string|null;last_activity:string }
+export function PrivateChats({onClose,onOpenRoom}:{onClose:()=>void;onOpenRoom:(room:DbRoom)=>void}){
+  const [rooms,setRooms]=useState<PrivateRoom[]>([]),[loading,setLoading]=useState(true),[people,setPeople]=useState<Profile[]>([]),[creating,setCreating]=useState(false),[query,setQuery]=useState(''),[busy,setBusy]=useState('')
+  const loadRooms=()=>supabase.rpc('list_private_rooms').then(({data})=>{setRooms((data as PrivateRoom[])||[]);setLoading(false)})
+  useEffect(()=>{loadRooms()},[])
+  useEffect(()=>{if(!creating)return;supabase.auth.getUser().then(({data})=>supabase.from('profiles').select('id,full_name,display_name,avatar_url,country,profile_type,about,interests,specialties,online').neq('id',data.user?.id||'').limit(80).then(({data})=>setPeople((data as Profile[])||[])))},[creating])
+  async function createRoom(p:Profile){setBusy(p.id);const {data,error}=await supabase.rpc('create_private_room',{other_user:p.id});setBusy('');if(error){alert(error.message);return}onClose();onOpenRoom({id:data,name:p.display_name||p.full_name,description:'Private two-person conversation',icon:'♢',theme:'sage',is_private:true})}
+  const filtered=people.filter(p=>(p.display_name||p.full_name).toLowerCase().includes(query.toLowerCase())||(p.country||'').toLowerCase().includes(query.toLowerCase()))
+  return <div className="feature-overlay"><section className="directory-window private-chats"><header><div><h2>{creating?'Create private room':'Private messages'}</h2><p>{creating?'Choose exactly one person. Only both of you can open this room.':'Your private two-person conversations.'}</p></div><button style={{width:'auto',height:34,marginLeft:'auto',padding:'0 12px',whiteSpace:'nowrap'}} onClick={()=>setCreating(!creating)}>{creating?'View chats':'New private room'}</button><button onClick={onClose}><X/></button></header>{creating?<><input className="people-search" placeholder="Search for the second person…" value={query} onChange={e=>setQuery(e.target.value)}/><div className="people-list">{filtered.length===0?<div className="empty-state"><MessageCircleMore/><h3>No people found</h3><p>Try searching by name or country.</p></div>:filtered.map(p=><article key={p.id}><span className="person-avatar">{p.avatar_url?<img src={p.avatar_url} alt=""/>:initials(p.display_name||p.full_name)}</span><div><h3>{p.display_name||p.full_name}{p.profile_type==='healer'&&<em>Healer / Therapist</em>}</h3><p>{p.country||'Nova Resort community'} · Private room for 2 users only</p></div><button disabled={busy===p.id} onClick={()=>createRoom(p)}>{busy===p.id?'…':<MessageCircleMore/>}</button></article>)}</div></>:loading?<div className="empty-state">Loading conversations…</div>:rooms.length===0?<div className="empty-state"><MessageCircleMore/><h3>No private conversations yet</h3><p>Create a private room with one other member.</p><button className="save-profile" onClick={()=>setCreating(true)}>Create private room</button></div>:<><div style={{padding:'0 20px 8px'}}><button className="new-message" onClick={()=>setCreating(true)}><MessageCircleMore size={16}/> Create private room</button></div><div className="people-list">{rooms.map(r=><button className="private-chat-row" key={r.id} onClick={()=>{onClose();onOpenRoom(r)}}><span className="person-avatar">{r.avatar_url?<img src={r.avatar_url} alt=""/>:r.name.slice(0,1)}</span><div><h3>{r.name}</h3><p>{r.last_message||'Start your private conversation.'}</p></div><small>{r.last_activity&&new Date(r.last_activity).toLocaleDateString()}</small></button>)}</div></>}</section></div>
+}
+
+export function EditProfile({userId,onClose}:{userId:string;onClose:()=>void}){
+  const [profile,setProfile]=useState<Profile|null>(null),[saved,setSaved]=useState(false),[uploading,setUploading]=useState(false)
+  useEffect(()=>{supabase.from('profiles').select('*').eq('id',userId).single().then(({data})=>setProfile(data as Profile))},[userId])
+  async function save(e:FormEvent<HTMLFormElement>){e.preventDefault();const d=new FormData(e.currentTarget);const {error}=await supabase.from('profiles').update({display_name:d.get('display_name'),country:d.get('country'),profile_type:d.get('profile_type'),about:d.get('about'),interests:String(d.get('interests')||'').split(',').map(x=>x.trim()).filter(Boolean),specialties:String(d.get('specialties')||'').split(',').map(x=>x.trim()).filter(Boolean),updated_at:new Date().toISOString()}).eq('id',userId);if(!error)setSaved(true)}
+  async function upload(file?:File){if(!file)return;if(file.size>5242880){alert('Please choose an image smaller than 5 MB.');return}setUploading(true);const ext=file.name.split('.').pop()?.toLowerCase()||'jpg',path=`${userId}/profile.${ext}`;const {error}=await supabase.storage.from('avatars').upload(path,file,{upsert:true,contentType:file.type});if(!error){const {data}=supabase.storage.from('avatars').getPublicUrl(path);const avatar_url=`${data.publicUrl}?v=${Date.now()}`;await supabase.from('profiles').update({avatar_url,updated_at:new Date().toISOString()}).eq('id',userId);setProfile(p=>p?{...p,avatar_url}:p)}else alert(error.message);setUploading(false)}
+  return <div className="feature-overlay"><section className="profile-window"><header><div><h2>Your profile</h2><p>Help the right people connect with you.</p></div><button onClick={onClose}><X/></button></header>{profile&&<form onSubmit={save}><div className="profile-photo-editor"><span>{profile.avatar_url?<img src={profile.avatar_url} alt="Profile"/>:initials(profile.display_name||profile.full_name)}</span><label><Camera/>{uploading?'Uploading…':'Add profile picture'}<input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={e=>upload(e.target.files?.[0])}/></label><small>JPG, PNG or WebP · Max 5 MB</small></div><label>Display name<input name="display_name" defaultValue={profile.display_name||profile.full_name}/></label><div className="form-row"><label>Country<input name="country" defaultValue={profile.country||''}/></label><label>Profile type<select name="profile_type" defaultValue={profile.profile_type}><option value="member">Community member</option><option value="healer">Healer / Therapist</option></select></label></div><label>About me<textarea name="about" defaultValue={profile.about} placeholder="Share a little about yourself…"/></label><label>Interests <small>Separate with commas</small><input name="interests" defaultValue={(profile.interests||[]).join(', ')}/></label><label>Healing specialties <small>For healers: meditation, mindfulness, emotional support…</small><input name="specialties" defaultValue={(profile.specialties||[]).join(', ')}/></label><button className="save-profile">{saved?'Saved ✓':'Save profile'}</button></form>}</section></div>
+}
+
+export function Notifications({userId,onClose}:{userId:string;onClose:()=>void}){
+  const [items,setItems]=useState<Notice[]>([])
+  const load=()=>supabase.from('notifications').select('*').eq('user_id',userId).order('created_at',{ascending:false}).limit(30).then(({data})=>setItems((data as Notice[])||[]))
+  useEffect(()=>{load();const c=supabase.channel(`notices-${userId}`).on('postgres_changes',{event:'INSERT',schema:'public',table:'notifications',filter:`user_id=eq.${userId}`},()=>load()).subscribe();return()=>{supabase.removeChannel(c)}},[userId])
+  async function open(n:Notice){await supabase.from('notifications').update({read_at:new Date().toISOString()}).eq('id',n.id);if(n.type==='connection_request'&&n.entity_id){await supabase.rpc('respond_connection_request',{request_id:n.entity_id,next_status:'accepted'})}if(n.type==='video_invite'&&n.entity_id){await supabase.from('video_sessions').update({status:'active',started_at:new Date().toISOString()}).eq('id',n.entity_id);window.open(`https://meet.jit.si/NovaResort-${n.entity_id}`,'_blank','noopener,noreferrer')}load()}
+  return <div className="feature-overlay"><section className="notification-window"><header><div><h2>Notifications</h2><p>Invitations and connection updates.</p></div><button onClick={onClose}><X/></button></header>{items.length===0?<div className="empty-state"><Bell/><h3>You’re all caught up</h3></div>:items.map(n=><button className={n.read_at?'notice read':'notice'} key={n.id} onClick={()=>open(n)}><span>{n.type==='video_invite'?<Video/>:<Heart/>}</span><div><b>{n.title}</b><p>{n.body}</p><small>{new Date(n.created_at).toLocaleString()}</small></div></button>)}</section></div>
+}
+
+export function SafetyCenter({onClose}:{onClose:()=>void}){
+  return <div className="feature-overlay"><section className="profile-window safety-window"><header><div><h2>Community safety</h2><p>A warm community depends on clear, caring boundaries.</p></div><button onClick={onClose}><X/></button></header><div className="safety-content"><Heart/><h3>Respect every person</h3><p>No harassment, bullying, hate speech, discrimination, explicit content or spam.</p><h3>Protect privacy</h3><p>Keep private conversations confidential. Never share another member’s personal information.</p><h3>Wellness support, not emergency care</h3><p>Members and healers must not provide an unsupported medical diagnosis. If someone is in immediate danger, contact local emergency services.</p><h3>Report harmful behaviour</h3><p>Block or report anyone who makes you feel unsafe. Serious violations may lead to suspension.</p><button className="save-profile" onClick={onClose}>I understand</button></div></section></div>
 }
