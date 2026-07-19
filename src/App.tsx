@@ -1,12 +1,13 @@
 import { FormEvent, useEffect, useState } from 'react'
 import {
   Bell, CalendarDays, ChevronDown, ChevronRight, CircleUserRound, Clock3,
-  Compass, Heart, Home, Leaf, LockKeyhole, Menu, MessageCircleMore, MoreHorizontal,
+  Bot, Compass, Heart, Home, Leaf, LockKeyhole, Menu, MessageCircleMore, MoreHorizontal,
   Search, Send, Settings, ShieldCheck, Sparkles, UsersRound, Video, X, Moon, Sun, Languages
 } from 'lucide-react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import { ChatRoom, Connections, DbRoom, EditProfile, Notifications, PeopleDirectory, PrivateChats, SafetyCenter } from './CommunityFeatures'
+import { AICompanion } from './AICompanion'
 import { DiscoverPeople, HealersDirectory } from './PeopleDiscovery'
 import { SessionsPage } from './SessionsEvents'
 import { applyLanguage, getLanguage, switchLanguage } from './i18n'
@@ -17,7 +18,7 @@ type Room = {
 }
 type LiveProfile = { id:string;full_name:string;display_name:string|null;avatar_url:string|null;profile_type:string;specialties:string[];about:string;online:boolean }
 type RecentMessage = { id:string;body:string;created_at:string;profiles?:{full_name:string;avatar_url:string|null}|null;rooms?:{id:string;name:string}|null }
-type Feature = 'discover'|'people'|'healers'|'profile'|'notifications'|'messages'|'safety'|'connections'|'sessions'
+type Feature = 'discover'|'people'|'healers'|'profile'|'notifications'|'messages'|'safety'|'connections'|'sessions'|'ai'
 type AppRoute = { feature: Feature | null; roomId: string | null }
 
 function routeFromHash(): AppRoute {
@@ -31,6 +32,7 @@ function routeFromHash(): AppRoute {
   if (value === 'healers' || value === 'community/healers') return { feature: 'healers', roomId: null }
   if (value === 'connections') return { feature: 'connections', roomId: null }
   if (value === 'messages') return { feature: 'messages', roomId: null }
+  if (value === 'ai' || value.startsWith('ai/')) return { feature: 'ai', roomId: null }
   if (value === 'sessions' || value === 'sessions/upcoming') return { feature: 'sessions', roomId: null }
   if (value === 'notifications') return { feature: 'notifications', roomId: null }
   if (value === 'profile' || value === 'settings') return { feature: 'profile', roomId: null }
@@ -49,6 +51,7 @@ function navFromFeature(feature: Feature | null) {
   if (feature === 'people') return 'Community'
   if (feature === 'healers') return 'Healers'
   if (feature === 'messages') return 'Messages'
+  if (feature === 'ai') return 'AI Companion'
   if (feature === 'connections') return 'Connections'
   if (feature === 'sessions') return 'Sessions'
   return 'Home'
@@ -221,8 +224,8 @@ function App() {
       <div className="side-top"><Logo/><button className="icon-btn close-mobile" onClick={() => setMenuOpen(false)}><X size={20}/></button></div>
       <nav>
         {[
-          [Home, 'Home'], [Compass, 'Discover'], [UsersRound, 'Community'], [Heart, 'Healers'], [Heart, 'Connections'], [MessageCircleMore, 'Messages'], [CalendarDays, 'Sessions']
-        ].map(([Icon, label]) => <button key={label as string} className={activeNav === label ? 'nav-item active' : 'nav-item'} onClick={() => {setMenuOpen(false);setRoute(label==='Community'?'community':label==='Discover'?'discover':label==='Healers'?'healers':label==='Connections'?'connections':label==='Messages'?'messages':label==='Sessions'?'sessions':'home')}}><Icon size={19}/><span>{label as string}</span>{label === 'Connections' && metrics.connections > 0 && <i>{metrics.connections}</i>}</button>)}
+          [Home, 'Home'], [Compass, 'Discover'], [UsersRound, 'Community'], [Heart, 'Healers'], [Heart, 'Connections'], [MessageCircleMore, 'Messages'], [Bot, 'AI Companion'], [CalendarDays, 'Sessions']
+        ].map(([Icon, label]) => <button key={label as string} className={activeNav === label ? 'nav-item active' : 'nav-item'} onClick={() => {setMenuOpen(false);setRoute(label==='Community'?'community':label==='Discover'?'discover':label==='Healers'?'healers':label==='Connections'?'connections':label==='Messages'?'messages':label==='AI Companion'?'ai':label==='Sessions'?'sessions':'home')}}><Icon size={19}/><span>{label as string}</span>{label === 'Connections' && metrics.connections > 0 && <i>{metrics.connections}</i>}</button>)}
       </nav>
       <div className="side-card">
         <div className="side-card-icon"><ShieldCheck size={20}/></div>
@@ -267,6 +270,7 @@ function App() {
           <button onClick={() => openFeature('discover')}><UsersRound size={16}/> Find people</button>
           <button onClick={() => openFeature('healers')}><Heart size={16}/> Find a healer</button>
           <button onClick={() => openFeature('sessions')}><CalendarDays size={16}/> Create session</button>
+          <button onClick={() => openFeature('ai')}><Bot size={16}/> AI Companion</button>
           <button onClick={() => openFeature('messages')}><MessageCircleMore size={16}/> Private rooms</button>
         </div>
 
@@ -319,6 +323,7 @@ function App() {
     {feature==='healers' && <HealersDirectory userId={session.user.id} onClose={closeOverlay} onOpenRoom={openRoom}/>} 
     {feature==='connections' && <Connections userId={session.user.id} onClose={closeOverlay} onOpenRoom={openRoom}/>} 
     {feature==='messages' && <PrivateChats onClose={closeOverlay} onOpenRoom={openRoom}/>} 
+    {feature==='ai' && <AICompanion userId={session.user.id} onClose={closeOverlay}/>} 
     {feature==='profile' && <EditProfile userId={session.user.id} onClose={closeOverlay}/>} 
     {feature==='sessions' && <SessionsPage userId={session.user.id} onClose={closeOverlay}/>} 
     {feature==='notifications' && <Notifications userId={session.user.id} onClose={closeOverlay}/>} 
