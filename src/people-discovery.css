@@ -191,7 +191,8 @@
 
 .card-actions > button,
 .card-actions .primary-action,
-.card-actions .ghost-action {
+.card-actions .ghost-action,
+.connection-reply-actions {
   flex:1;
   min-width:0;
   height:34px;
@@ -199,6 +200,21 @@
   align-items:center;
   justify-content:center;
   gap:6px;
+}
+
+.connection-reply-actions {
+  gap:6px;
+}
+
+.connection-reply-actions button {
+  flex:1;
+  min-width:0;
+}
+
+.ghost-action.danger {
+  color:#9b5b53;
+  border-color:#ead3cf;
+  background:#fff8f6;
 }
 
 .card-actions > button {
