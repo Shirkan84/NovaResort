@@ -7,14 +7,17 @@ import {
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import { ChatRoom, Connections, DbRoom, EditProfile, Notifications, PeopleDirectory, PrivateChats, SafetyCenter } from './CommunityFeatures'
+import { DiscoverPeople, HealersDirectory } from './PeopleDiscovery'
+import { SessionsPage } from './SessionsEvents'
 import { applyLanguage, getLanguage, switchLanguage } from './i18n'
+import './social-home.css'
 
 type Room = {
   title: string; description: string; people: number; color: string; icon: string; tags: string[]
 }
 type LiveProfile = { id:string;full_name:string;display_name:string|null;avatar_url:string|null;profile_type:string;specialties:string[];about:string;online:boolean }
 type RecentMessage = { id:string;body:string;created_at:string;profiles?:{full_name:string;avatar_url:string|null}|null;rooms?:{id:string;name:string}|null }
-type Feature = 'discover'|'people'|'profile'|'notifications'|'messages'|'safety'|'connections'
+type Feature = 'discover'|'people'|'healers'|'profile'|'notifications'|'messages'|'safety'|'connections'|'sessions'
 type AppRoute = { feature: Feature | null; roomId: string | null }
 
 function routeFromHash(): AppRoute {
@@ -23,11 +26,13 @@ function routeFromHash(): AppRoute {
     .replace(/^\/+|\/+$/g, '')
   const value = decodeURIComponent(window.location.hash.replace(/^#\/?/, '') || pathRoute || 'home')
   if (value.startsWith('room/')) return { feature: null, roomId: value.slice(5) || null }
-  if (value === 'discover' || value === 'rooms') return { feature: 'discover', roomId: null }
-  if (value === 'community' || value === 'members' || value === 'members/online' || value === 'healers') return { feature: 'people', roomId: null }
+  if (value === 'discover' || value === 'members' || value === 'members/online') return { feature: 'discover', roomId: null }
+  if (value === 'community' || value === 'rooms' || value === 'discover/rooms') return { feature: 'people', roomId: null }
+  if (value === 'healers' || value === 'community/healers') return { feature: 'healers', roomId: null }
   if (value === 'connections') return { feature: 'connections', roomId: null }
   if (value === 'messages') return { feature: 'messages', roomId: null }
-  if (value === 'sessions' || value === 'notifications') return { feature: 'notifications', roomId: null }
+  if (value === 'sessions' || value === 'sessions/upcoming') return { feature: 'sessions', roomId: null }
+  if (value === 'notifications') return { feature: 'notifications', roomId: null }
   if (value === 'profile' || value === 'settings') return { feature: 'profile', roomId: null }
   if (value === 'safety' || value === 'community-guidelines' || value === 'privacy' || value === 'terms') return { feature: 'safety', roomId: null }
   return { feature: null, roomId: null }
@@ -42,9 +47,10 @@ function setRoute(path: string) {
 function navFromFeature(feature: Feature | null) {
   if (feature === 'discover') return 'Discover'
   if (feature === 'people') return 'Community'
+  if (feature === 'healers') return 'Healers'
   if (feature === 'messages') return 'Messages'
   if (feature === 'connections') return 'Connections'
-  if (feature === 'notifications') return 'Sessions'
+  if (feature === 'sessions') return 'Sessions'
   return 'Home'
 }
 
@@ -185,7 +191,7 @@ function App() {
         supabase.from('profiles').select('id',{count:'exact',head:true}).eq('profile_type','healer'),
         supabase.from('profiles').select('id,full_name,display_name,avatar_url,profile_type,specialties,about,online').eq('profile_type','healer').limit(6),
         supabase.from('rooms').select('id',{count:'exact',head:true}).eq('is_private',false),
-        supabase.from('video_sessions').select('id',{count:'exact',head:true}).or(`host_id.eq.${session.user.id},guest_id.eq.${session.user.id}`).in('status',['invited','active']),
+        supabase.from('sessions').select('id',{count:'exact',head:true}).gte('starts_at',new Date().toISOString()).in('status',['published','live','registration_closed']),
         supabase.from('notifications').select('id',{count:'exact',head:true}).eq('user_id',session.user.id).is('read_at',null),
         supabase.from('friendships').select('id',{count:'exact',head:true}).eq('addressee_id',session.user.id).eq('status','pending'),
         supabase.from('messages').select('id,body,created_at,profiles!messages_sender_id_fkey(full_name,avatar_url),rooms!messages_room_id_fkey(id,name)').order('created_at',{ascending:false}).limit(3),
@@ -215,8 +221,8 @@ function App() {
       <div className="side-top"><Logo/><button className="icon-btn close-mobile" onClick={() => setMenuOpen(false)}><X size={20}/></button></div>
       <nav>
         {[
-          [Home, 'Home'], [Compass, 'Discover'], [UsersRound, 'Community'], [Heart, 'Connections'], [MessageCircleMore, 'Messages'], [CalendarDays, 'Sessions']
-        ].map(([Icon, label]) => <button key={label as string} className={activeNav === label ? 'nav-item active' : 'nav-item'} onClick={() => {setMenuOpen(false);setRoute(label==='Community'?'community':label==='Discover'?'discover':label==='Connections'?'connections':label==='Messages'?'messages':label==='Sessions'?'notifications':'home')}}><Icon size={19}/><span>{label as string}</span>{label === 'Connections' && metrics.connections > 0 && <i>{metrics.connections}</i>}</button>)}
+          [Home, 'Home'], [Compass, 'Discover'], [UsersRound, 'Community'], [Heart, 'Healers'], [Heart, 'Connections'], [MessageCircleMore, 'Messages'], [CalendarDays, 'Sessions']
+        ].map(([Icon, label]) => <button key={label as string} className={activeNav === label ? 'nav-item active' : 'nav-item'} onClick={() => {setMenuOpen(false);setRoute(label==='Community'?'community':label==='Discover'?'discover':label==='Healers'?'healers':label==='Connections'?'connections':label==='Messages'?'messages':label==='Sessions'?'sessions':'home')}}><Icon size={19}/><span>{label as string}</span>{label === 'Connections' && metrics.connections > 0 && <i>{metrics.connections}</i>}</button>)}
       </nav>
       <div className="side-card">
         <div className="side-card-icon"><ShieldCheck size={20}/></div>
@@ -235,7 +241,7 @@ function App() {
       <header>
         <button className="icon-btn menu-btn" onClick={() => setMenuOpen(true)}><Menu size={22}/></button>
         <div className="mobile-logo"><Logo/></div>
-        <div className="search" onClick={()=>openFeature('people')}><Search size={18}/><input aria-label="Search" readOnly placeholder="Search people, rooms, or topics..."/><span>⌘ K</span></div>
+        <div className="search" onClick={()=>openFeature('discover')}><Search size={18}/><input aria-label="Search" readOnly placeholder="Search people, rooms, or topics..."/><span>⌘ K</span></div>
         <div className="header-actions">
           <button className="language-toggle" onClick={()=>switchLanguage(language==='en'?'he':'en')}><Languages size={17}/>{language==='en'?'עברית':'English'}</button>
           <button className="icon-btn" aria-label="Toggle theme" onClick={() => setDark(!dark)}>{dark ? <Sun size={19}/> : <Moon size={19}/>}</button>
@@ -254,7 +260,14 @@ function App() {
           <div><span className="stat-icon green"><UsersRound/></span><p><b>{metrics.online}</b><small>Members online</small></p><em>{metrics.members} registered</em></div>
           <div><span className="stat-icon purple"><Heart/></span><p><b>{metrics.healers}</b><small>Healers available</small></p><em>Registered guides</em></div>
           <div><span className="stat-icon amber"><MessageCircleMore/></span><p><b>{metrics.rooms}</b><small>Active rooms</small></p><em>Join anytime</em></div>
-          <div><span className="stat-icon blue"><CalendarDays/></span><p><b>{metrics.sessions}</b><small>Upcoming sessions</small></p><button onClick={() => openFeature('notifications')}>View invitations</button></div>
+          <div><span className="stat-icon blue"><CalendarDays/></span><p><b>{metrics.sessions}</b><small>Upcoming sessions</small></p><button onClick={() => openFeature('sessions')}>View sessions</button></div>
+        </div>
+
+        <div className="quick-actions">
+          <button onClick={() => openFeature('discover')}><UsersRound size={16}/> Find people</button>
+          <button onClick={() => openFeature('healers')}><Heart size={16}/> Find a healer</button>
+          <button onClick={() => openFeature('sessions')}><CalendarDays size={16}/> Create session</button>
+          <button onClick={() => openFeature('messages')}><MessageCircleMore size={16}/> Private rooms</button>
         </div>
 
         <div className="layout">
@@ -270,7 +283,7 @@ function App() {
             </section>
 
             <section className="healer-section">
-              <div className="section-head"><div><h2>Connect with a healer</h2><p>Community healers who are here to listen and support.</p></div><button onClick={() => openFeature('people')}>View all healers <ChevronRight size={16}/></button></div>
+              <div className="section-head"><div><h2>Connect with a healer</h2><p>Community healers who are here to listen and support.</p></div><button onClick={() => openFeature('healers')}>View all healers <ChevronRight size={16}/></button></div>
               <div className="healer-grid">{liveHealers.length===0?<div className="inline-empty">No healers have registered yet.</div>:liveHealers.slice(0,3).map((h,i) => <article className="healer-card" key={h.id}>
                 <div className={`avatar healer ${['rose','blue','gold'][i%3]}`}>{h.avatar_url?<img src={h.avatar_url} alt=""/>:(h.display_name||h.full_name||'H').slice(0,2).toUpperCase()}<i className={h.online ? 'online' : ''}/></div>
                 <div className="healer-info"><h3>{h.display_name||h.full_name}<Heart size={14}/></h3><p>Healer / Therapist</p><span>{h.specialties?.[0]||'Emotional wellness'}</span></div>
@@ -284,12 +297,12 @@ function App() {
           <aside className="right-col">
             <section className="panel conversations"><div className="panel-head"><h3>Recent conversations</h3><button onClick={() => openFeature('messages')}>View all</button></div>
               {recentMessages.length===0?<p className="mini-empty">No community messages yet.</p>:recentMessages.map(c => <button className="conversation" key={c.id} onClick={() => c.rooms&&openRoom({id:c.rooms.id,name:c.rooms.name,description:'Community conversation',icon:'♡',theme:'sage',is_private:false})}><div className="avatar soft">{c.profiles?.avatar_url?<img src={c.profiles.avatar_url} alt=""/>:(c.profiles?.full_name||'N').slice(0,1)}</div><div><b>{c.profiles?.full_name||'Community member'}</b><p>{c.body}</p></div><span>{new Date(c.created_at).toLocaleDateString()}</span></button>)}
-              <button className="new-message" onClick={() => openFeature('people')}><Send size={16}/> Start a new message</button>
+              <button className="new-message" onClick={() => openFeature('discover')}><Send size={16}/> Start a new message</button>
             </section>
 
-            <section className="panel session"><div className="panel-head"><h3>Private wellness sessions</h3><button onClick={()=>openFeature('notifications')}><MoreHorizontal size={18}/></button></div>
-              <div className="date-box"><b>{metrics.sessions}</b><span>LIVE</span></div><div className="session-copy"><h4>{metrics.sessions?'Session invitation waiting':'No upcoming sessions'}</h4><p>{metrics.sessions?'Open your invitations to join.':'Connect with a healer or community member.'}</p><span><Clock3 size={14}/> Private two-person video</span></div>
-              <button className="join-session" onClick={() => openFeature(metrics.sessions?'notifications':'people')}><Video size={16}/> {metrics.sessions?'View invitations':'Find someone'}</button>
+            <section className="panel session"><div className="panel-head"><h3>Upcoming wellness sessions</h3><button onClick={()=>openFeature('sessions')}><MoreHorizontal size={18}/></button></div>
+              <div className="date-box"><b>{metrics.sessions}</b><span>OPEN</span></div><div className="session-copy"><h4>{metrics.sessions?'Sessions open now':'Create the first session'}</h4><p>{metrics.sessions?'Join a group event or host your own.':'Events can be public, private, live, or waitlisted.'}</p><span><Clock3 size={14}/> Community workshops and rooms</span></div>
+              <button className="join-session" onClick={() => openFeature('sessions')}><Video size={16}/> Open sessions</button>
             </section>
 
             <section className="checkin"><span><CircleUserRound size={21}/></span><div><h3>How are you feeling?</h3><p>A small check-in can make a big difference.</p><div className="moods">{['😔','😕','😐','🙂','😊'].map(x => <button key={x} onClick={() => act('Thank you for checking in')}>{x}</button>)}</div></div></section>
@@ -300,12 +313,14 @@ function App() {
       </div>
     </main>
     {menuOpen && <button className="backdrop" aria-label="Close menu" onClick={() => setMenuOpen(false)}/>} 
-    {feature==='discover' && <PeopleDirectory userId={session.user.id} onClose={closeOverlay} onOpenRoom={openRoom}/>} 
+    {feature==='discover' && <DiscoverPeople userId={session.user.id} onClose={closeOverlay} onOpenRoom={openRoom}/>} 
     {selectedRoom && <ChatRoom room={selectedRoom} userId={session.user.id} onClose={closeOverlay}/>} 
     {feature==='people' && <PeopleDirectory userId={session.user.id} onClose={closeOverlay} onOpenRoom={openRoom}/>} 
+    {feature==='healers' && <HealersDirectory userId={session.user.id} onClose={closeOverlay} onOpenRoom={openRoom}/>} 
     {feature==='connections' && <Connections userId={session.user.id} onClose={closeOverlay} onOpenRoom={openRoom}/>} 
     {feature==='messages' && <PrivateChats onClose={closeOverlay} onOpenRoom={openRoom}/>} 
     {feature==='profile' && <EditProfile userId={session.user.id} onClose={closeOverlay}/>} 
+    {feature==='sessions' && <SessionsPage userId={session.user.id} onClose={closeOverlay}/>} 
     {feature==='notifications' && <Notifications userId={session.user.id} onClose={closeOverlay}/>} 
     {feature==='safety' && <SafetyCenter onClose={closeOverlay}/>} 
     {notice && <div className="toast"><ShieldCheck size={17}/>{notice}</div>}
