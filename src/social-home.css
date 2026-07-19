@@ -1,0 +1,45 @@
+.quick-actions {
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  margin:-18px 0 30px;
+}
+
+.quick-actions button {
+  height:38px;
+  border:1px solid var(--line);
+  border-radius:11px;
+  background:var(--card);
+  color:#577567;
+  padding:0 13px;
+  display:flex;
+  align-items:center;
+  gap:7px;
+  font-size:10px;
+  font-weight:700;
+  box-shadow:0 7px 22px #35473d08;
+  transition:transform .2s ease, box-shadow .2s ease, background .2s ease;
+}
+
+.quick-actions button:hover {
+  transform:translateY(-2px);
+  background:#eef5ef;
+  box-shadow:0 12px 28px #35473d12;
+}
+
+.dark .quick-actions button:hover {
+  background:#2b3932;
+}
+
+@media(max-width:580px) {
+  .quick-actions {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    margin-top:-20px;
+  }
+
+  .quick-actions button {
+    justify-content:center;
+    padding:0 8px;
+  }
+}
