@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { MessageCircleMore, Search, ShieldCheck, UserPlus, UsersRound, X } from 'lucide-react'
+import { Heart, MessageCircleMore, Search, ShieldCheck, UserPlus, UsersRound, X } from 'lucide-react'
 import { supabase } from './supabase'
 import type { DbRoom } from './CommunityFeatures'
 import './people-discovery.css'
@@ -62,7 +62,10 @@ function ConnectButton({ userId, person, friendships, reload }:{ userId:string; 
 
   if (state === 'accepted') return <button className="ghost-action" disabled>Connected</button>
   if (state === 'sent') return <button className="ghost-action" disabled={busy || !row} onClick={() => row && run(() => supabase.rpc('cancel_connection_request', { request_id:row.id }))}>Request sent</button>
-  if (state === 'incoming') return <button className="ghost-action" disabled={busy || !row} onClick={() => row && run(() => supabase.rpc('respond_connection_request', { request_id:row.id, next_status:'accepted' }))}>Accept</button>
+  if (state === 'incoming') return <span className="connection-reply-actions">
+    <button className="primary-action" disabled={busy || !row} onClick={() => row && run(() => supabase.rpc('respond_connection_request', { request_id:row.id, next_status:'accepted' }))}>Accept</button>
+    <button className="ghost-action danger" disabled={busy || !row} onClick={() => row && run(() => supabase.rpc('respond_connection_request', { request_id:row.id, next_status:'declined' }))}>Deny</button>
+  </span>
   return <button className="primary-action" disabled={busy} onClick={() => run(() => supabase.rpc('send_connection_request', { other_user:person.id }))}><UserPlus size={15}/> Connect</button>
 }
 
