@@ -1,12 +1,22 @@
 const ROUTE_TO_BUTTON: Record<string, string> = {
   discover: 'Discover',
   community: 'Community',
+  rooms: 'Discover',
   messages: 'Messages',
+  members: 'Community',
+  'members/online': 'Community',
+  healers: 'Community',
+  connections: 'Connections',
   sessions: 'Sessions',
+  'sessions/upcoming': 'Sessions',
   notifications: 'Notifications',
   profile: 'Settings',
+  'profile/edit': 'Settings',
   settings: 'Settings',
   safety: 'Visit safety center',
+  'community-guidelines': 'Visit safety center',
+  privacy: 'Visit safety center',
+  terms: 'Visit safety center',
 }
 
 function getRoute() {
