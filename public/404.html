@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Nova Resort</title>
+    <script>
+      (function () {
+        var base = '/NovaResort';
+        var path = window.location.pathname;
+        var route = path.indexOf(base) === 0 ? path.slice(base.length) : path;
+        route = route.replace(/^\/+|\/+$/g, '') || 'home';
+        var target = base + '/#' + route + window.location.search + window.location.hash;
+        window.location.replace(target);
+      })();
+    </script>
+  </head>
+  <body>
+    Opening Nova Resort...
+  </body>
+</html>
