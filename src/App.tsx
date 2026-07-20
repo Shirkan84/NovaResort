@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from 'react'
 import {
   Bell, CalendarDays, ChevronDown, ChevronRight, CircleUserRound, Clock3,
   Bot, Compass, Heart, Home, Leaf, LockKeyhole, Menu, MessageCircleMore, MoreHorizontal,
-  Search, Send, Settings, ShieldCheck, Sparkles, UsersRound, Video, X, Moon, Sun, Languages, UserPlus
+  Search, Send, Settings, ShieldCheck, Sparkles, UsersRound, Video, X, Moon, Sun, Languages, UserPlus, Headphones
 } from 'lucide-react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
@@ -11,6 +11,7 @@ import { AICompanion } from './AICompanion'
 import { PrivateChats, PrivateChatRoom } from './PrivateMessaging'
 import { DiscoverPeople, HealersDirectory } from './PeopleDiscovery'
 import { SessionsPage } from './SessionsEvents'
+import { PodcastPlatform, PodcastMiniPlayer, PopularPodcastsStrip, ProfilePodcastSection, PlayerEpisode } from './PodcastPlatform'
 import { applyLanguage, getLanguage, switchLanguage } from './i18n'
 import './social-home.css'
 
@@ -21,27 +22,34 @@ type LiveProfile = { id:string;full_name:string;display_name:string|null;avatar_
 type RecentMessage = { id:string;body:string;created_at:string;profiles?:{full_name:string;avatar_url:string|null}|null;rooms?:{id:string;name:string}|null }
 type Friendship = { id:string; requester_id:string; addressee_id:string; status:string }
 type NextSession = { id:string; title:string; starts_at:string; host_id:string }
-type Feature = 'discover'|'people'|'healers'|'profile'|'notifications'|'messages'|'safety'|'connections'|'sessions'|'ai'
-type AppRoute = { feature: Feature | null; roomId: string | null; profileId: string | null }
+type Feature = 'discover'|'people'|'healers'|'profile'|'notifications'|'messages'|'safety'|'connections'|'sessions'|'ai'|'podcasts'
+type AppRoute = { feature: Feature | null; roomId: string | null; profileId: string | null; podcastId: string | null; episodeId: string | null; podcastStudio: boolean }
 
 function routeFromHash(): AppRoute {
   const pathRoute = window.location.pathname
     .replace(/^\/NovaResort\/?/, '')
     .replace(/^\/+|\/+$/g, '')
   const value = decodeURIComponent(window.location.hash.replace(/^#\/?/, '') || pathRoute || 'home')
-  if (value.startsWith('room/')) return { feature: null, roomId: value.slice(5) || null, profileId: null }
-  if (value.startsWith('profile/')) return { feature: null, roomId: null, profileId: value.slice(8) || null }
-  if (value === 'discover' || value === 'members' || value === 'members/online') return { feature: 'discover', roomId: null, profileId: null }
-  if (value === 'community' || value === 'rooms' || value === 'discover/rooms') return { feature: 'people', roomId: null, profileId: null }
-  if (value === 'healers' || value === 'community/healers') return { feature: 'healers', roomId: null, profileId: null }
-  if (value === 'connections') return { feature: 'connections', roomId: null, profileId: null }
-  if (value === 'messages') return { feature: 'messages', roomId: null, profileId: null }
-  if (value === 'ai' || value.startsWith('ai/')) return { feature: 'ai', roomId: null, profileId: null }
-  if (value === 'sessions' || value === 'sessions/upcoming') return { feature: 'sessions', roomId: null, profileId: null }
-  if (value === 'notifications') return { feature: 'notifications', roomId: null, profileId: null }
-  if (value === 'profile' || value === 'settings') return { feature: 'profile', roomId: null, profileId: null }
-  if (value === 'safety' || value === 'community-guidelines' || value === 'privacy' || value === 'terms') return { feature: 'safety', roomId: null, profileId: null }
-  return { feature: null, roomId: null, profileId: null }
+  const base = { feature: null, roomId: null, profileId: null, podcastId: null, episodeId: null, podcastStudio: false }
+  if (value.startsWith('room/')) return { ...base, roomId: value.slice(5) || null }
+  if (value.startsWith('profile/')) return { ...base, profileId: value.slice(8) || null }
+  if (value === 'podcasts/manage') return { ...base, feature: 'podcasts', podcastStudio: true }
+  if (value.startsWith('podcasts/')) {
+    const parts = value.split('/')
+    return { ...base, feature: 'podcasts', podcastId: parts[1] || null, episodeId: parts[3] || null }
+  }
+  if (value === 'podcasts') return { ...base, feature: 'podcasts' }
+  if (value === 'discover' || value === 'members' || value === 'members/online') return { ...base, feature: 'discover' }
+  if (value === 'community' || value === 'rooms' || value === 'discover/rooms') return { ...base, feature: 'people' }
+  if (value === 'healers' || value === 'community/healers') return { ...base, feature: 'healers' }
+  if (value === 'connections') return { ...base, feature: 'connections' }
+  if (value === 'messages') return { ...base, feature: 'messages' }
+  if (value === 'ai' || value.startsWith('ai/')) return { ...base, feature: 'ai' }
+  if (value === 'sessions' || value === 'sessions/upcoming') return { ...base, feature: 'sessions' }
+  if (value === 'notifications') return { ...base, feature: 'notifications' }
+  if (value === 'profile' || value === 'settings') return { ...base, feature: 'profile' }
+  if (value === 'safety' || value === 'community-guidelines' || value === 'privacy' || value === 'terms') return { ...base, feature: 'safety' }
+  return base
 }
 
 function setRoute(path: string) {
@@ -59,6 +67,7 @@ function navFromFeature(feature: Feature | null) {
   if (feature === 'ai') return 'AI Companion'
   if (feature === 'connections') return 'Connections'
   if (feature === 'sessions') return 'Sessions'
+  if (feature === 'podcasts') return 'Podcasts'
   return 'Home'
 }
 
@@ -152,6 +161,7 @@ function App() {
   const [friendships,setFriendships] = useState<Friendship[]>([])
   const [profilePreview,setProfilePreview] = useState<LiveProfile|null>(null)
   const [currentAvatar,setCurrentAvatar] = useState<string|null>(null)
+  const [podcastPlayer,setPodcastPlayer] = useState<PlayerEpisode|null>(null)
   const [metrics,setMetrics] = useState({members:0,online:0,healers:0,rooms:0,sessions:0,notifications:0,connections:0})
 
   useEffect(() => {
@@ -277,6 +287,8 @@ function App() {
   const closeOverlay = () => setRoute('home')
   const openProfile = (id:string) => setRoute(`profile/${id}`)
   const openHealers = () => setRoute('healers')
+  const openPodcast = (id?:string) => setRoute(id === 'manage' ? 'podcasts/manage' : id ? `podcasts/${id}` : 'podcasts')
+  const openPodcastEpisode = (podcastId:string, episodeId:string) => setRoute(`podcasts/${podcastId}/episodes/${episodeId}`)
   async function startPrivateMessage(person:LiveProfile){const {data,error}=await supabase.rpc('create_private_room',{other_user:person.id});if(error){act(error.message);return}openRoom({id:data,name:profileName(person),description:'Private two-person conversation',icon:'♢',theme:'sage',is_private:true})}
   async function connectWith(person:LiveProfile){
     if (!session) return
@@ -307,8 +319,8 @@ function App() {
       <div className="side-top"><Logo/><button className="icon-btn close-mobile" onClick={() => setMenuOpen(false)}><X size={20}/></button></div>
       <nav>
         {[
-          [Home, 'Home'], [Compass, 'Discover'], [UsersRound, 'Community'], [Sun, 'Healers'], [Heart, 'Connections'], [MessageCircleMore, 'Messages'], [Bot, 'AI Companion'], [CalendarDays, 'Sessions']
-        ].map(([Icon, label]) => <button key={label as string} className={activeNav === label ? 'nav-item active' : 'nav-item'} onClick={() => {setMenuOpen(false);setRoute(label==='Community'?'community':label==='Discover'?'discover':label==='Healers'?'healers':label==='Connections'?'connections':label==='Messages'?'messages':label==='AI Companion'?'ai':label==='Sessions'?'sessions':'home')}}><Icon size={19}/><span>{label as string}</span>{label === 'Connections' && metrics.connections > 0 && <i>{metrics.connections}</i>}</button>)}
+          [Home, 'Home'], [Compass, 'Discover'], [UsersRound, 'Community'], [Sun, 'Healers'], [Headphones, 'Podcasts'], [Heart, 'Connections'], [MessageCircleMore, 'Messages'], [Bot, 'AI Companion'], [CalendarDays, 'Sessions']
+        ].map(([Icon, label]) => <button key={label as string} className={activeNav === label ? 'nav-item active' : 'nav-item'} onClick={() => {setMenuOpen(false);setRoute(label==='Community'?'community':label==='Discover'?'discover':label==='Healers'?'healers':label==='Podcasts'?'podcasts':label==='Connections'?'connections':label==='Messages'?'messages':label==='AI Companion'?'ai':label==='Sessions'?'sessions':'home')}}><Icon size={19}/><span>{label as string}</span>{label === 'Connections' && metrics.connections > 0 && <i>{metrics.connections}</i>}</button>)}
       </nav>
       <div className="side-card">
         <div className="side-card-icon"><ShieldCheck size={20}/></div>
@@ -352,6 +364,7 @@ function App() {
         <div className="quick-actions">
           <button onClick={() => openFeature('discover')}><UsersRound size={16}/> Find people</button>
           <button onClick={openHealers}><Sun size={16}/> Find a healer</button>
+          <button onClick={() => openFeature('podcasts')}><Headphones size={16}/> Podcasts</button>
           <button onClick={() => openFeature('sessions')}><CalendarDays size={16}/> Create session</button>
           <button onClick={() => openFeature('ai')}><Bot size={16}/> AI Companion</button>
           <button onClick={() => openFeature('messages')}><MessageCircleMore size={16}/> Private rooms</button>
@@ -373,6 +386,8 @@ function App() {
                 </div>
               </article>})}</div>}
             </section>
+
+            <PopularPodcastsStrip onOpenPodcast={openPodcast} onPlayEpisode={setPodcastPlayer} onOpenProfile={openProfile}/>
 
             <section>
               <div className="section-head"><div><h2>Find your space</h2><p>Join a conversation that feels right for you today.</p></div><button onClick={() => setShowAllRooms(!showAllRooms)}>{showAllRooms?'Show fewer rooms':'View all rooms'} <ChevronRight size={16}/></button></div>
@@ -413,11 +428,14 @@ function App() {
     {feature==='connections' && <Connections userId={session.user.id} onClose={closeOverlay} onOpenRoom={openRoom}/>} 
     {feature==='messages' && <PrivateChats onClose={closeOverlay} onOpenRoom={openRoom}/>} 
     {feature==='ai' && <AICompanion userId={session.user.id} onClose={closeOverlay}/>} 
+    {feature==='podcasts' && <PodcastPlatform userId={session.user.id} podcastId={route.podcastId} episodeId={route.episodeId} studio={route.podcastStudio} onClose={closeOverlay} onOpenPodcast={openPodcast} onOpenEpisode={openPodcastEpisode} onOpenProfile={openProfile} onPlayEpisode={setPodcastPlayer}/>} 
     {feature==='profile' && <EditProfile userId={session.user.id} onClose={closeOverlay}/>} 
     {feature==='sessions' && <SessionsPage userId={session.user.id} onClose={closeOverlay}/>} 
     {feature==='notifications' && <Notifications userId={session.user.id} onClose={closeOverlay}/>} 
     {feature==='safety' && <SafetyCenter onClose={closeOverlay}/>} 
     {profilePreview && <div className="feature-overlay"><section className="profile-window public-profile-window"><header><div><h2>{profileName(profilePreview)}</h2><p>{roleLabel(profilePreview)}{profilePreview.country?` · ${profilePreview.country}`:''}</p></div><button onClick={closeOverlay}><X/></button></header><div className="public-profile-body"><span className="avatar healer rose public-profile-avatar">{profilePreview.avatar_url?<img src={profilePreview.avatar_url} alt={`${profileName(profilePreview)} profile photo`} loading="lazy"/>:profileInitials(profileName(profilePreview))}<i className={profilePreview.online?'online':''}/></span><p>{profilePreview.about||'This professional has not added a bio yet.'}</p><div className="healer-tags">{[...(profilePreview.specialties||[]),...(profilePreview.interests||[])].slice(0,6).map(tag=><span key={tag}>{tag}</span>)}</div><div className="healer-actions"><button onClick={()=>connectWith(profilePreview)}><UserPlus size={13}/> Connect</button><button onClick={()=>startPrivateMessage(profilePreview)}><MessageCircleMore size={13}/> Message</button><button onClick={()=>openFeature('sessions')}>View sessions</button></div></div></section></div>} 
+    {profilePreview && <div className="profile-podcast-sidecar"><ProfilePodcastSection profileId={profilePreview.id} onOpenPodcast={openPodcast}/></div>}
+    <PodcastMiniPlayer episode={podcastPlayer} onClose={() => setPodcastPlayer(null)}/>
     {notice && <div className="toast"><ShieldCheck size={17}/>{notice}</div>}
   </div>
 }

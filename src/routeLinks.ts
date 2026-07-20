@@ -6,6 +6,8 @@ const ROUTE_TO_BUTTON: Record<string, string> = {
   members: 'Community',
   'members/online': 'Community',
   healers: 'Healers',
+  podcasts: 'Podcasts',
+  'podcasts/manage': 'Podcasts',
   connections: 'Connections',
   sessions: 'Sessions',
   'sessions/upcoming': 'Sessions',
