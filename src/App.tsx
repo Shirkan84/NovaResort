@@ -12,6 +12,7 @@ import { PrivateChats, PrivateChatRoom } from './PrivateMessaging'
 import { DiscoverPeople, HealersDirectory } from './PeopleDiscovery'
 import { SessionsPage } from './SessionsEvents'
 import { PodcastPlatform, PodcastMiniPlayer, PopularPodcastsStrip, ProfilePodcastSection, PlayerEpisode } from './PodcastPlatform'
+import { getFeaturedHealers, PROFESSIONAL_ROLES } from './services/healers'
 import { applyLanguage, getLanguage, switchLanguage } from './i18n'
 import './social-home.css'
 
@@ -83,7 +84,7 @@ function Logo() {
 
 const profileName = (profile:LiveProfile) => profile.display_name || profile.full_name || 'Nova member'
 const profileInitials = (name?:string|null) => (name || 'N').split(' ').map(part => part[0]).join('').slice(0,2).toUpperCase()
-const healerRoles = ['healer','therapist','coach','mindfulness_teacher','wellness_professional']
+const healerRoles = [...PROFESSIONAL_ROLES]
 const roleLabel = (profile:LiveProfile) => profile.profile_type === 'healer' ? 'Healer / Therapist' : profile.profile_type.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
 const relationshipFor = (id:string, rows:Friendship[]) => rows.find(row => row.requester_id === id || row.addressee_id === id)
 
@@ -208,6 +209,7 @@ function App() {
   const [showAllRooms,setShowAllRooms] = useState(false)
   const [liveHealers,setLiveHealers] = useState<LiveProfile[]>([])
   const [healersLoading,setHealersLoading] = useState(true)
+  const [healersError,setHealersError] = useState('')
   const [recentMessages,setRecentMessages] = useState<RecentMessage[]>([])
   const [friendships,setFriendships] = useState<Friendship[]>([])
   const [profilePreview,setProfilePreview] = useState<LiveProfile|null>(null)
@@ -289,12 +291,12 @@ function App() {
     const loadLiveData=async()=>{
       const fiveMinutesAgo=new Date(Date.now()-5*60*1000).toISOString()
       setHealersLoading(true)
-      const [rooms,allMembers,online,healerCount,healers,activeRooms,sessions,notifications,connections,activity,me,relations]=await Promise.all([
+      const [rooms,allMembers,online,healerCount,featuredHealersResult,activeRooms,sessions,notifications,connections,activity,me,relations]=await Promise.all([
         supabase.from('rooms').select('id,name,description,icon,theme,is_private').eq('is_private',false).limit(6),
         supabase.from('profiles').select('id',{count:'exact',head:true}),
         supabase.from('profiles').select('id',{count:'exact',head:true}).gte('last_seen',fiveMinutesAgo),
-        supabase.from('profiles').select('id',{count:'exact',head:true}).in('profile_type',healerRoles).neq('visibility','private').eq('account_status','active').eq('discoverable',true),
-        supabase.from('profiles').select('id,full_name,display_name,avatar_url,country,profile_type,about,interests,specialties,online,visibility').in('profile_type',healerRoles).neq('visibility','private').eq('account_status','active').eq('discoverable',true).limit(12),
+        supabase.from('profiles').select('id',{count:'exact',head:true}).in('profile_type',healerRoles).eq('professional_verification_status','approved').neq('visibility','private').eq('account_status','active').eq('discoverable',true),
+        getFeaturedHealers(12).then(data=>({data,error:null as Error|null})).catch(error=>({data:[],error:error as Error})),
         supabase.from('rooms').select('id',{count:'exact',head:true}).eq('is_private',false),
         supabase.from('sessions').select('id',{count:'exact',head:true}).gte('starts_at',new Date().toISOString()).in('status',['published','live','registration_closed']),
         supabase.from('notifications').select('id',{count:'exact',head:true}).eq('user_id',session.user.id).is('read_at',null),
@@ -303,23 +305,8 @@ function App() {
         supabase.from('profiles').select('avatar_url').eq('id',session.user.id).single(),
         supabase.from('friendships').select('id,requester_id,addressee_id,status').or(`requester_id.eq.${session.user.id},addressee_id.eq.${session.user.id}`).in('status',['pending','accepted'])
       ])
-      const healerRows = ((healers.data as LiveProfile[])||[]).filter(profile => profile.id !== session.user.id)
-      let nextByHost = new Map<string,NextSession>()
-      if (healerRows.length) {
-        const { data: upcoming } = await supabase
-          .from('sessions')
-          .select('id,title,starts_at,host_id')
-          .in('host_id', healerRows.map(profile => profile.id))
-          .eq('visibility','public')
-          .in('status',['published','live','registration_closed'])
-          .gte('starts_at',new Date().toISOString())
-          .order('starts_at',{ascending:true})
-          .limit(40)
-        for (const item of ((upcoming as NextSession[])||[])) {
-          if (!nextByHost.has(item.host_id)) nextByHost.set(item.host_id,item)
-        }
-      }
-      setDbRooms((rooms.data as DbRoom[])||[]);setLiveHealers(healerRows.map(profile => ({...profile,next_session:nextByHost.get(profile.id)||null})));setHealersLoading(false);setRecentMessages((activity.data as unknown as RecentMessage[])||[]);setFriendships((relations.data as Friendship[])||[]);setCurrentAvatar(me.data?.avatar_url||null)
+      const healerRows = featuredHealersResult.data.map(profile => ({...profile,interests:null,visibility:'community',next_session:profile.next_session_id?{id:profile.next_session_id,title:profile.next_session_title||'Upcoming session',starts_at:profile.next_session_starts_at||new Date().toISOString(),host_id:profile.id}:null}))
+      setDbRooms((rooms.data as DbRoom[])||[]);setLiveHealers(healerRows);setHealersError(featuredHealersResult.error?'We could not load healers right now. Please try again.':'');setHealersLoading(false);setRecentMessages((activity.data as unknown as RecentMessage[])||[]);setFriendships((relations.data as Friendship[])||[]);setCurrentAvatar(me.data?.avatar_url||null)
       setMetrics({members:allMembers.count||0,online:online.count||0,healers:healerCount.count||0,rooms:activeRooms.count||0,sessions:sessions.count||0,notifications:notifications.count||0,connections:connections.count||0})
     }
     const heartbeat=()=>supabase.from('profiles').update({online:true,last_seen:new Date().toISOString()}).eq('id',session.user.id)
@@ -425,7 +412,7 @@ function App() {
           <div className="main-col">
             <section className="healer-section">
               <div className="section-head"><div><button className="section-title-link" onClick={openHealers}><h2>Meet our healers</h2></button><p>Connect with registered wellness professionals, explore their profiles, and discover their upcoming sessions and workshops.</p></div><button onClick={openHealers}>View all healers <ChevronRight size={16}/></button></div>
-              {healersLoading?<div className="healer-strip"><div className="healer-card wide skeleton"/><div className="healer-card wide skeleton"/><div className="healer-card wide skeleton"/></div>:liveHealers.length===0?<div className="inline-empty">No healer profiles are available yet. Registered professionals will appear here once their profiles are completed.</div>:<div className="healer-strip" role="list" aria-label="Registered healers">{liveHealers.map(h=>{const relation=relationshipFor(h.id,friendships),connectLabel=relation?.status==='accepted'?'Connected':relation?.status==='pending'&&relation.requester_id===session.user.id?'Request sent':relation?.status==='pending'?'Accept request':'Connect';return <article className="healer-card wide" role="listitem" key={h.id}>
+              {healersLoading?<div className="healer-strip"><div className="healer-card wide skeleton"/><div className="healer-card wide skeleton"/><div className="healer-card wide skeleton"/></div>:healersError?<div className="inline-empty">{healersError}</div>:liveHealers.length===0?<div className="inline-empty">No verified healers are available yet.</div>:<div className="healer-strip" role="list" aria-label="Registered healers">{liveHealers.map(h=>{const relation=relationshipFor(h.id,friendships),connectLabel=relation?.status==='accepted'?'Connected':relation?.status==='pending'&&relation.requester_id===session.user.id?'Request sent':relation?.status==='pending'?'Accept request':'Connect';return <article className="healer-card wide" role="listitem" key={h.id}>
                 <button className="healer-photo-button" onClick={()=>openProfile(h.id)} aria-label={`View ${profileName(h)} profile`}><span className="avatar healer rose">{h.avatar_url?<img src={h.avatar_url} alt={`${profileName(h)} profile photo`} loading="lazy" onError={event=>{event.currentTarget.style.display='none'}}/>:profileInitials(profileName(h))}<i className={h.online?'online':''}/><span className="sr-only">{h.online?'Online now':'Offline'}</span></span></button>
                 <div className="healer-info">
                   <button className="healer-name" onClick={()=>openProfile(h.id)}>{profileName(h)}</button>

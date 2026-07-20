@@ -5,20 +5,14 @@ import {
 } from 'lucide-react'
 import { supabase } from './supabase'
 import type { DbRoom } from './CommunityFeatures'
+import { searchPublicHealers, type PublicHealer } from './services/healers'
 import './people-discovery.css'
 
 type Profile = {
   id:string; full_name:string; display_name:string|null; avatar_url:string|null; country:string|null;
   profile_type:string; about:string|null; interests:string[]|null; specialties:string[]|null; online:boolean|null
 }
-type HealerProfile = {
-  id:string; full_name:string; display_name:string|null; avatar_url:string|null; country:string|null;
-  languages:string[]|null; profile_type:string; professional_title:string|null;
-  professional_verification_status:string; about:string|null; specialties:string[]|null;
-  availability:string|null; online:boolean|null; last_seen:string|null;
-  next_session_id:string|null; next_session_title:string|null; next_session_starts_at:string|null;
-  total_count:number
-}
+type HealerProfile = PublicHealer
 type Friendship = { id:string; requester_id:string; addressee_id:string; status:string }
 
 const PAGE_SIZE = 12
@@ -249,25 +243,24 @@ export function HealersDirectory({ userId, onClose, onOpenRoom, onOpenProfile, o
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
-    const { data, error } = await supabase.rpc('search_healers', {
-      search_text: query.trim(),
-      professional_type: professionalType,
-      language_filter: language,
-      country_filter: country,
-      online_only: onlineOnly,
-      verified_only: verifiedOnly,
-      availability_filter: availability,
-      page_limit: PAGE_SIZE,
-      page_offset: page * PAGE_SIZE,
-    })
-    if (error) {
-      setError(error.message)
-      setItems([])
-      setTotal(0)
-    } else {
-      const rows = (data as HealerProfile[]) || []
+    try {
+      const rows = await searchPublicHealers({
+        query,
+        professionalType,
+        language,
+        country,
+        onlineOnly,
+        verifiedOnly,
+        availability,
+        limit: PAGE_SIZE,
+        offset: page * PAGE_SIZE,
+      })
       setItems(rows)
       setTotal(Number(rows[0]?.total_count || 0))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'We could not load healers right now. Please try again.')
+      setItems([])
+      setTotal(0)
     }
     setLoading(false)
   }, [query, professionalType, language, country, onlineOnly, verifiedOnly, availability, page])
@@ -290,8 +283,8 @@ export function HealersDirectory({ userId, onClose, onOpenRoom, onOpenProfile, o
         <button className={onlineOnly ? 'active' : ''} onClick={() => setOnlineOnly(value => !value)}>Online</button>
         <button className={verifiedOnly ? 'active' : ''} onClick={() => setVerifiedOnly(value => !value)}>Verified</button>
       </div>
-      <div className="directory-count">{loading ? 'Loading healers...' : `${total} eligible healer${total === 1 ? '' : 's'} found`}</div>
-      {loading ? <div className="empty-state">Loading healer profiles...</div> : error ? <div className="empty-state"><Sun/><h3>Healers unavailable</h3><p>{error}</p></div> : items.length === 0 ? <div className="empty-state"><UsersRound/><h3>No healer profiles match</h3><p>Try changing the filters or search text.</p></div> : <div className="healer-directory-list">
+      <div className="directory-count">{loading ? 'Loading healers...' : `${total} verified healer${total === 1 ? '' : 's'} found`}</div>
+      {loading ? <div className="empty-state">Loading healer profiles...</div> : error ? <div className="empty-state"><Sun/><h3>Healers unavailable</h3><p>We could not load healers right now. Please try again.</p></div> : items.length === 0 ? <div className="empty-state"><UsersRound/><h3>No verified healers are available yet.</h3><p>Try changing the filters or check back after administrator approvals.</p></div> : <div className="healer-directory-list">
         {items.map(healer => <HealerCard key={healer.id} healer={healer} userId={userId} friendships={friendships} reload={reload} onClose={onClose} onOpenRoom={onOpenRoom} onOpenProfile={onOpenProfile} onOpenSessions={onOpenSessions}/>)}
       </div>}
       <footer className="directory-pagination">

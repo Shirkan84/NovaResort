@@ -73,8 +73,7 @@ as $$
   with filtered as (
     select p.*
     from public.profiles p
-    where p.id <> (select auth.uid())
-      and p.account_status = 'active'
+    where p.account_status = 'active'
       and p.discoverable = true
       and p.visibility <> 'private'
       and p.profile_type in ('healer','therapist','coach','mindfulness_teacher','wellness_professional')
