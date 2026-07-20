@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  BadgeCheck, CalendarDays, ChevronLeft, ChevronRight, Filter, Heart,
+  BadgeCheck, CalendarDays, ChevronLeft, ChevronRight, Filter, Sun,
   Languages, MapPin, MessageCircleMore, Search, ShieldCheck, UserPlus, UsersRound, X
 } from 'lucide-react'
 import { supabase } from './supabase'
@@ -202,7 +202,7 @@ function HealerCard({ healer, userId, friendships, reload, onClose, onOpenRoom, 
       <div className="healer-directory-meta">
         {healer.country && <span><MapPin size={13}/>{healer.country}</span>}
         {(healer.languages || []).length > 0 && <span><Languages size={13}/>{(healer.languages || []).slice(0, 3).join(', ')}</span>}
-        <span><Heart size={13}/>{healer.online ? 'Online now' : 'Offline'}</span>
+        <span><Sun size={13}/>{healer.online ? 'Online now' : 'Offline'}</span>
       </div>
       <p className="healer-directory-bio">{healer.about || 'This wellness professional has not added a biography yet.'}</p>
       <div className="chip-row">{(healer.specialties || ['Emotional wellness']).slice(0, 5).map(tag => <span key={tag}>{tag}</span>)}</div>
@@ -291,7 +291,7 @@ export function HealersDirectory({ userId, onClose, onOpenRoom, onOpenProfile, o
         <button className={verifiedOnly ? 'active' : ''} onClick={() => setVerifiedOnly(value => !value)}>Verified</button>
       </div>
       <div className="directory-count">{loading ? 'Loading healers...' : `${total} eligible healer${total === 1 ? '' : 's'} found`}</div>
-      {loading ? <div className="empty-state">Loading healer profiles...</div> : error ? <div className="empty-state"><Heart/><h3>Healers unavailable</h3><p>{error}</p></div> : items.length === 0 ? <div className="empty-state"><UsersRound/><h3>No healer profiles match</h3><p>Try changing the filters or search text.</p></div> : <div className="healer-directory-list">
+      {loading ? <div className="empty-state">Loading healer profiles...</div> : error ? <div className="empty-state"><Sun/><h3>Healers unavailable</h3><p>{error}</p></div> : items.length === 0 ? <div className="empty-state"><UsersRound/><h3>No healer profiles match</h3><p>Try changing the filters or search text.</p></div> : <div className="healer-directory-list">
         {items.map(healer => <HealerCard key={healer.id} healer={healer} userId={userId} friendships={friendships} reload={reload} onClose={onClose} onOpenRoom={onOpenRoom} onOpenProfile={onOpenProfile} onOpenSessions={onOpenSessions}/>)}
       </div>}
       <footer className="directory-pagination">

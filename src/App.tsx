@@ -307,7 +307,7 @@ function App() {
       <div className="side-top"><Logo/><button className="icon-btn close-mobile" onClick={() => setMenuOpen(false)}><X size={20}/></button></div>
       <nav>
         {[
-          [Home, 'Home'], [Compass, 'Discover'], [UsersRound, 'Community'], [Heart, 'Healers'], [Heart, 'Connections'], [MessageCircleMore, 'Messages'], [Bot, 'AI Companion'], [CalendarDays, 'Sessions']
+          [Home, 'Home'], [Compass, 'Discover'], [UsersRound, 'Community'], [Sun, 'Healers'], [Heart, 'Connections'], [MessageCircleMore, 'Messages'], [Bot, 'AI Companion'], [CalendarDays, 'Sessions']
         ].map(([Icon, label]) => <button key={label as string} className={activeNav === label ? 'nav-item active' : 'nav-item'} onClick={() => {setMenuOpen(false);setRoute(label==='Community'?'community':label==='Discover'?'discover':label==='Healers'?'healers':label==='Connections'?'connections':label==='Messages'?'messages':label==='AI Companion'?'ai':label==='Sessions'?'sessions':'home')}}><Icon size={19}/><span>{label as string}</span>{label === 'Connections' && metrics.connections > 0 && <i>{metrics.connections}</i>}</button>)}
       </nav>
       <div className="side-card">
@@ -344,14 +344,14 @@ function App() {
 
         <div className="stats">
           <div><span className="stat-icon green"><UsersRound/></span><p><b>{metrics.online}</b><small>Members online</small></p><em>{metrics.members} registered</em></div>
-          <button className="stat-link" onClick={openHealers}><span className="stat-icon purple"><Heart/></span><p><b>{metrics.healers}</b><small>Healers available</small></p><em>Registered guides</em></button>
+          <button className="stat-link" onClick={openHealers}><span className="stat-icon purple"><Sun/></span><p><b>{metrics.healers}</b><small>Healers available</small></p><em>Registered guides</em></button>
           <div><span className="stat-icon amber"><MessageCircleMore/></span><p><b>{metrics.rooms}</b><small>Active rooms</small></p><em>Join anytime</em></div>
           <div><span className="stat-icon blue"><CalendarDays/></span><p><b>{metrics.sessions}</b><small>Upcoming sessions</small></p><button onClick={() => openFeature('sessions')}>View sessions</button></div>
         </div>
 
         <div className="quick-actions">
           <button onClick={() => openFeature('discover')}><UsersRound size={16}/> Find people</button>
-          <button onClick={openHealers}><Heart size={16}/> Find a healer</button>
+          <button onClick={openHealers}><Sun size={16}/> Find a healer</button>
           <button onClick={() => openFeature('sessions')}><CalendarDays size={16}/> Create session</button>
           <button onClick={() => openFeature('ai')}><Bot size={16}/> AI Companion</button>
           <button onClick={() => openFeature('messages')}><MessageCircleMore size={16}/> Private rooms</button>
