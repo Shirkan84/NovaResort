@@ -5,7 +5,7 @@ const ROUTE_TO_BUTTON: Record<string, string> = {
   messages: 'Messages',
   members: 'Community',
   'members/online': 'Community',
-  healers: 'Community',
+  healers: 'Healers',
   connections: 'Connections',
   sessions: 'Sessions',
   'sessions/upcoming': 'Sessions',
@@ -30,7 +30,7 @@ function getRoute() {
 
 function normalizePathRoute(route: string) {
   if (window.location.hash || route === 'home') return
-  window.history.replaceState(null, '', `/NovaResort/#${route}`)
+  window.history.replaceState(null, '', `/NovaResort/#/${route}`)
 }
 
 function clickMatchingButton(label: string) {
