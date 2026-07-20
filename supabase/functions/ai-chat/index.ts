@@ -28,12 +28,37 @@ function json(body: unknown, status = 200) {
   });
 }
 
+function errorJson(code: string, message: string, status = 400, requestId?: string, extra: Record<string, unknown> = {}) {
+  return json({ error: { code, message, requestId }, ...extra }, status);
+}
+
 function isCrisis(text: string) {
   return /\b(kill myself|suicide|end my life|self[- ]?harm|hurt myself|i want to die|overdose|abuse|being abused|hurt someone|kill someone|emergency|can't stay safe)\b/i.test(text);
 }
 
 function titleFrom(text: string) {
   return text.replace(/\s+/g, " ").trim().slice(0, 56) || "AI conversation";
+}
+
+function shouldLoadNovaContext(text: string) {
+  return /\b(room|rooms|community|healer|guide|session|mindfulness|meditation|support|growth|gratitude|relationship|creativity)\b/i.test(text);
+}
+
+async function novaContextFor(admin: ReturnType<typeof createClient>, text: string) {
+  if (!shouldLoadNovaContext(text)) return "";
+  const [roomsResult, healersResult, sessionsResult] = await Promise.all([
+    admin.rpc("list_public_rooms"),
+    admin.from("profiles").select("display_name,full_name,about,specialties").eq("profile_type", "healer").neq("visibility", "private").limit(6),
+    admin.from("sessions").select("title,description,category,starts_at").eq("visibility", "public").in("status", ["published", "live", "registration_closed"]).gte("starts_at", new Date().toISOString()).order("starts_at", { ascending: true }).limit(5),
+  ]);
+  const rooms = (roomsResult.data || []).slice(0, 8).map((room) => `Room: ${room.name} - ${room.description || "wellness room"}${room.online_members ? " (live)" : ""}`);
+  const healers = (healersResult.data || []).map((healer) => {
+    const specialties = Array.isArray(healer.specialties) && healer.specialties.length ? ` Specialties: ${healer.specialties.slice(0, 4).join(", ")}.` : "";
+    return `Healer: ${healer.display_name || healer.full_name || "Nova healer"} - ${healer.about || "Available for supportive wellness conversations"}.${specialties}`;
+  });
+  const sessions = (sessionsResult.data || []).map((session) => `Session: ${session.title} - ${session.description || session.category || "Upcoming wellness session"}${session.starts_at ? ` at ${session.starts_at}` : ""}`);
+  const lines = [...rooms, ...healers, ...sessions].slice(0, 14);
+  return lines.length ? `Public Nova Resort context. Use only this public context when recommending rooms, healers, or sessions:\n${lines.join("\n")}` : "";
 }
 
 function crisisMessage() {
@@ -64,29 +89,30 @@ async function readJson(request: Request): Promise<ChatRequest> {
 
 export default {
   async fetch(request: Request) {
+    const requestId = crypto.randomUUID();
     if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-    if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+    if (request.method !== "POST") return errorJson("METHOD_NOT_ALLOWED", "Method not allowed.", 405, requestId);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const openaiKey = Deno.env.get("OPENAI_API_KEY");
-    if (!supabaseUrl || !anonKey || !serviceRoleKey) return json({ error: "AI service is not configured." }, 500);
+    if (!supabaseUrl || !anonKey || !serviceRoleKey) return errorJson("AI_SERVICE_NOT_CONFIGURED", "AI service is not configured.", 500, requestId);
 
     const authHeader = request.headers.get("Authorization") || "";
     const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
     const admin = createClient(supabaseUrl, serviceRoleKey);
 
     const { data: authData, error: authError } = await userClient.auth.getUser();
-    if (authError || !authData.user) return json({ error: "Sign in is required." }, 401);
+    if (authError || !authData.user) return errorJson("AUTH_REQUIRED", "Sign in is required.", 401, requestId);
     const userId = authData.user.id;
 
     const payload = await readJson(request);
     const conversationId = String(payload.conversationId || "");
     const incoming = String(payload.message || payload.starter || "").trim();
-    if (!conversationId) return json({ error: "conversationId is required." }, 400);
-    if (!incoming && !payload.retryLast) return json({ error: "Message is required." }, 400);
-    if (incoming.length > MAX_INPUT_CHARS) return json({ error: `Message is too long. Please keep it under ${MAX_INPUT_CHARS} characters.` }, 413);
+    if (!conversationId) return errorJson("MISSING_CONVERSATION", "conversationId is required.", 400, requestId);
+    if (!incoming && !payload.retryLast) return errorJson("MISSING_MESSAGE", "Message is required.", 400, requestId);
+    if (incoming.length > MAX_INPUT_CHARS) return errorJson("MESSAGE_TOO_LONG", `Message is too long. Please keep it under ${MAX_INPUT_CHARS} characters.`, 413, requestId);
 
     const { data: conversation, error: conversationError } = await admin
       .from("ai_conversations")
@@ -94,7 +120,7 @@ export default {
       .eq("id", conversationId)
       .single();
     if (conversationError || !conversation || conversation.user_id !== userId || conversation.deleted_at) {
-      return json({ error: "Conversation not found." }, 404);
+      return errorJson("CONVERSATION_NOT_FOUND", "Conversation not found.", 404, requestId);
     }
 
     const sinceDay = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
@@ -105,11 +131,11 @@ export default {
     ]);
     if ((dailyCount || 0) >= DAILY_LIMIT) {
       await admin.from("ai_usage").insert({ user_id: userId, conversation_id: conversationId, event_type: "limit" });
-      return json({ error: `Daily AI limit reached. You can send ${DAILY_LIMIT} AI messages per day.`, limitReached: true }, 429);
+      return errorJson("DAILY_LIMIT_REACHED", `Daily AI limit reached. You can send ${DAILY_LIMIT} AI messages per day.`, 429, requestId, { limitReached: true });
     }
     if ((minuteCount || 0) >= MINUTE_LIMIT) {
       await admin.from("ai_usage").insert({ user_id: userId, conversation_id: conversationId, event_type: "limit" });
-      return json({ error: "Please pause for a moment before sending another AI message.", limitReached: true }, 429);
+      return errorJson("RATE_LIMITED", "Please pause for a moment before sending another AI message.", 429, requestId, { limitReached: true });
     }
 
     let userMessage = incoming;
@@ -125,7 +151,7 @@ export default {
         .limit(1)
         .maybeSingle();
       userMessage = String(lastUser?.content || "").trim();
-      if (!userMessage) return json({ error: "No user message is available to retry." }, 400);
+      if (!userMessage) return errorJson("NO_MESSAGE_TO_RETRY", "No user message is available to retry.", 400, requestId);
     } else {
       const { error: insertError } = await admin.from("ai_messages").insert({
         conversation_id: conversationId,
@@ -133,7 +159,7 @@ export default {
         role: "user",
         content: userMessage,
       });
-      if (insertError) return json({ error: "Could not save your message." }, 500);
+      if (insertError) return errorJson("SAVE_MESSAGE_FAILED", "Could not save your message.", 500, requestId);
     }
 
     if (conversation.title === "New AI conversation") {
@@ -150,12 +176,12 @@ export default {
       }).select("id,created_at").single();
       await admin.from("ai_usage").insert({ user_id: userId, conversation_id: conversationId, event_type: "blocked" });
       await admin.from("ai_conversations").update({ last_message_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", conversationId);
-      return json({ message: { id: saved?.id, role: "assistant", content, created_at: saved?.created_at }, crisis: true });
+      return json({ message: { id: saved?.id, role: "assistant", content, created_at: saved?.created_at }, crisis: true, requestId });
     }
 
     if (!openaiKey) {
       await admin.from("ai_usage").insert({ user_id: userId, conversation_id: conversationId, event_type: "error" });
-      return json({ error: "Nova AI is not connected yet. Add OPENAI_API_KEY to Supabase Edge Function secrets." }, 503);
+      return errorJson("AI_NOT_CONFIGURED", "Nova AI is not connected yet. Add OPENAI_API_KEY to Supabase Edge Function secrets.", 503, requestId);
     }
 
     const { data: history } = await admin
@@ -167,7 +193,9 @@ export default {
       .order("created_at", { ascending: false })
       .limit(CONTEXT_LIMIT);
 
+    const novaContext = await novaContextFor(admin, userMessage);
     const input = [
+      ...(novaContext ? [{ role: "user", content: novaContext }] : []),
       ...(history || []).reverse().map((m) => ({
         role: m.role === "assistant" ? "assistant" : "user",
         content: String(m.content).slice(0, MAX_INPUT_CHARS),
@@ -201,11 +229,11 @@ export default {
         output_tokens: usage.output_tokens || 0,
       });
       await admin.from("ai_conversations").update({ last_message_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", conversationId);
-      return json({ message: { id: saved?.id, role: "assistant", content, created_at: saved?.created_at }, crisis: false, usage });
+      return json({ message: { id: saved?.id, role: "assistant", content, created_at: saved?.created_at }, crisis: false, usage, requestId });
     } catch (error) {
       await admin.from("ai_usage").insert({ user_id: userId, conversation_id: conversationId, event_type: "error" });
-      console.error("ai-chat failed", error instanceof Error ? error.name : "unknown");
-      return json({ error: "Nova AI could not respond right now. Please try again shortly." }, 502);
+      console.error("ai-chat failed", { requestId, name: error instanceof Error ? error.name : "unknown" });
+      return errorJson("OPENAI_REQUEST_FAILED", "Nova AI could not respond right now. Please try again shortly.", 502, requestId);
     }
   },
 };
