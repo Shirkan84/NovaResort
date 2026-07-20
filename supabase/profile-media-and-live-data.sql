@@ -32,12 +32,25 @@ using (bucket_id = 'avatars' and owner_id = auth.uid()::text);
 create index if not exists profiles_last_seen_idx on public.profiles(last_seen desc);
 create index if not exists messages_created_at_idx on public.messages(created_at desc);
 
--- Members may choose member or healer, but can never grant themselves admin access.
+create or replace function public.current_account_type()
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p.profile_type from public.profiles p where p.id = (select auth.uid())
+$$;
+
+revoke all on function public.current_account_type() from public;
+grant execute on function public.current_account_type() to authenticated;
+
+-- Members can edit profile details, but account type is locked after registration.
 drop policy if exists "users update own profile" on public.profiles;
 create policy "users update own profile" on public.profiles
 for update to authenticated
 using (id = auth.uid())
-with check (id = auth.uid() and profile_type in ('member','healer'));
+with check (id = auth.uid() and profile_type = public.current_account_type());
 
 -- Creates or reuses a room that can only be accessed by exactly two users.
 create or replace function public.create_private_room(other_user uuid)
