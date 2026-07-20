@@ -31,12 +31,40 @@
   font-size:11px;
 }
 
+.member-toolbar {
+  grid-template-columns:minmax(250px, 1fr);
+}
+
+.member-toolbar label button {
+  border:0;
+  background:transparent;
+  color:#557567;
+  font-size:9px;
+  font-weight:800;
+  padding:0;
+}
+
 .discovery-toolbar > div {
   display:flex;
   align-items:center;
   gap:7px;
   flex-wrap:wrap;
   justify-content:flex-end;
+}
+
+.member-toolbar > div {
+  justify-content:flex-start;
+}
+
+.member-toolbar select {
+  height:34px;
+  border:1px solid var(--line);
+  background:var(--card);
+  color:var(--muted);
+  border-radius:10px;
+  padding:0 10px;
+  font-size:9px;
+  font-weight:700;
 }
 
 .discovery-toolbar button,
@@ -80,6 +108,13 @@
   transform:translateY(-3px);
   border-color:#cbd9d0;
   box-shadow:0 15px 32px #273d3314;
+}
+
+.discovery-card.skeleton {
+  height:210px;
+  background:linear-gradient(90deg,var(--card),var(--page),var(--card));
+  background-size:200% 100%;
+  animation:shimmer 1.3s infinite;
 }
 
 .profile-open {
@@ -146,6 +181,12 @@
   font:700 14px Manrope;
   margin:0;
   color:var(--deep);
+}
+
+.discovery-card h3 {
+  display:flex;
+  align-items:center;
+  gap:4px;
 }
 
 .discovery-card .profile-open p {
@@ -553,4 +594,6 @@
   .healer-directory-card { flex-direction:column; }
   .healer-directory-photo { width:66px; height:66px; border-radius:20px; }
   .directory-pagination { justify-content:space-between; }
+  .member-toolbar > div { display:grid; grid-template-columns:1fr; width:100%; }
+  .member-toolbar select,.member-toolbar button { width:100%; }
 }

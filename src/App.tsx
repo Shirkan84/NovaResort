@@ -389,7 +389,7 @@ function App() {
       <div className="content">
         <section className="welcome">
           <div><p className="eyebrow">WELCOME TO NOVA RESORT</p><h1>Good to see you, {name.split(' ')[0]} <span>✦</span></h1><p className="platform-intro">A caring space where members and wellness professionals connect, talk, heal, grow, and support one another. Therapists, healers, and coaches can also host <mark>online sessions and workshops</mark> for the community.</p></div>
-          <button className="primary" onClick={() => openFeature('people')}><Compass size={17}/> Explore the community</button>
+          <div className="welcome-actions"><button className="primary" onClick={() => openFeature('people')}><Compass size={17}/> Explore the community</button><button className="secondary-cta" onClick={() => setRoute('members')}><UsersRound size={17}/> Discover Members</button></div>
         </section>
 
         <div className="stats">
@@ -459,7 +459,7 @@ function App() {
       </div>
     </main>
     {menuOpen && <button className="backdrop" aria-label="Close menu" onClick={() => setMenuOpen(false)}/>} 
-    {feature==='discover' && <DiscoverPeople userId={session.user.id} onClose={closeOverlay} onOpenRoom={openRoom}/>} 
+    {feature==='discover' && <DiscoverPeople userId={session.user.id} onClose={closeOverlay} onOpenRoom={openRoom} onOpenProfile={openProfile}/>}
     {selectedRoom && (selectedRoom.is_private ? <PrivateChatRoom room={selectedRoom} userId={session.user.id} onClose={closeOverlay} onOpenProfile={openProfile}/> : <ChatRoom room={selectedRoom} userId={session.user.id} onClose={closeOverlay}/>)} 
     {feature==='people' && <PeopleDirectory userId={session.user.id} onClose={closeOverlay} onOpenRoom={openRoom}/>} 
     {feature==='healers' && <HealersDirectory userId={session.user.id} onClose={closeOverlay} onOpenRoom={openRoom} onOpenProfile={openProfile} onOpenSessions={()=>openFeature('sessions')}/>} 
