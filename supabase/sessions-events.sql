@@ -48,26 +48,51 @@ alter table public.session_registrations enable row level security;
 drop policy if exists "public sessions are visible" on public.sessions;
 create policy "public sessions are visible" on public.sessions
 for select to authenticated
-using (visibility = 'public' or host_id = auth.uid() or exists (
-  select 1 from public.session_registrations sr
-  where sr.session_id = id and sr.user_id = auth.uid() and sr.status in ('registered','waitlisted','attended')
-));
+using (visibility = 'public' or host_id = auth.uid());
 
 drop policy if exists "users create own sessions" on public.sessions;
 create policy "users create own sessions" on public.sessions
 for insert to authenticated
-with check (host_id = auth.uid() and starts_at > now());
+with check (
+  host_id = auth.uid()
+  and starts_at > now()
+  and exists (
+    select 1 from public.profiles p
+    where p.id = auth.uid()
+      and p.account_status = 'active'
+      and p.professional_verification_status = 'approved'
+      and p.profile_type in ('healer','therapist','coach','mindfulness_teacher','wellness_professional','admin')
+  )
+);
 
 drop policy if exists "hosts update own sessions" on public.sessions;
 create policy "hosts update own sessions" on public.sessions
 for update to authenticated
-using (host_id = auth.uid())
-with check (host_id = auth.uid());
+using (
+  host_id = auth.uid()
+  and exists (
+    select 1 from public.profiles p
+    where p.id = auth.uid()
+      and p.account_status = 'active'
+      and p.professional_verification_status = 'approved'
+      and p.profile_type in ('healer','therapist','coach','mindfulness_teacher','wellness_professional','admin')
+  )
+)
+with check (
+  host_id = auth.uid()
+  and exists (
+    select 1 from public.profiles p
+    where p.id = auth.uid()
+      and p.account_status = 'active'
+      and p.professional_verification_status = 'approved'
+      and p.profile_type in ('healer','therapist','coach','mindfulness_teacher','wellness_professional','admin')
+  )
+);
 
 drop policy if exists "participants view own registrations" on public.session_registrations;
 create policy "participants view own registrations" on public.session_registrations
 for select to authenticated
-using (user_id = auth.uid() or exists (select 1 from public.sessions s where s.id = session_id and s.host_id = auth.uid()));
+using (user_id = auth.uid());
 
 create or replace function public.register_for_session(target_session uuid)
 returns text
@@ -136,8 +161,6 @@ $$;
 
 revoke all on function public.register_for_session(uuid) from public;
 revoke all on function public.cancel_session_registration(uuid) from public;
-revoke execute on function public.register_for_session(uuid) from anon;
-revoke execute on function public.cancel_session_registration(uuid) from anon;
 grant execute on function public.register_for_session(uuid) to authenticated;
 grant execute on function public.cancel_session_registration(uuid) to authenticated;
 

@@ -29,7 +29,8 @@ for update to authenticated
 using (id = (select auth.uid()))
 with check (
   id = (select auth.uid())
-  and profile_type in ('member','healer','therapist','coach','mindfulness_teacher','wellness_professional')
+  and profile_type = public.current_account_type()
+  and professional_verification_status = public.current_verification_status()
   and account_status = 'active'
 );
 
@@ -77,6 +78,7 @@ as $$
       and p.discoverable = true
       and p.visibility <> 'private'
       and p.profile_type in ('healer','therapist','coach','mindfulness_teacher','wellness_professional')
+      and p.professional_verification_status = 'approved'
       and not exists (
         select 1 from public.user_blocks b
         where b.blocker_id = (select auth.uid()) and b.blocked_id = p.id

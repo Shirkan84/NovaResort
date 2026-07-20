@@ -90,9 +90,17 @@ const relationshipFor = (id:string, rows:Friendship[]) => rows.find(row => row.r
 function AuthScreen() {
   const language = getLanguage()
   const [mode, setMode] = useState<'login'|'register'|'reset'>('login')
+  const [profileType, setProfileType] = useState('member')
+  const [professionalTitle, setProfessionalTitle] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const professionalTitles = ['Psychologist','Therapist','Life Coach','Mental Health Counselor','Meditation Teacher','Mindfulness Coach','Holistic Therapist','Social Worker','Wellness Practitioner','Other']
+  const specialties = ['Anxiety','Depression','Trauma','PTSD','Grief','Relationships','Marriage Counseling','Family Therapy','Parenting','ADHD','Addiction Recovery','Stress Management','Burnout','Mindfulness','Meditation','Self-Esteem','Personal Growth','Emotional Healing','Spiritual Guidance','Sleep',"Women's Health","Men's Health",'Teen Support','Career Coaching','Life Coaching','Wellness','Nutrition','Breathwork','Yoga','Other']
+  const languages = ['English','Hebrew','Arabic','Spanish','French','Russian','German','Portuguese','Italian','Other']
+  const cleanList = (value:FormDataEntryValue|null) => String(value||'').split(',').map(item=>item.trim()).filter(Boolean)
+  const parseEntries = (value:FormDataEntryValue|null, keys:string[]) => String(value||'').split('\n').map(line=>line.trim()).filter(Boolean).map(line=>{const parts=line.split('|').map(item=>item.trim());return keys.reduce((entry,key,index)=>({...entry,[key]:parts[index]||''}),{} as Record<string,string>)})
+  const safeFileName = (name:string) => name.replace(/[^a-zA-Z0-9._-]/g,'-')
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -103,14 +111,57 @@ function AuthScreen() {
     try {
       if (mode === 'register') {
         const fullName = String(data.get('fullName') || '').trim()
+        const requestedType = String(data.get('profileType') || 'member')
         if (password !== String(data.get('confirmPassword') || '')) throw new Error('Passwords do not match.')
         if (!data.get('guidelines')) throw new Error('Please accept the community guidelines.')
-        const { error } = await supabase.auth.signUp({ email, password, options: {
+        const healerDocuments = Array.from(data.getAll('healerDocuments')).filter((item): item is File => item instanceof File && item.size > 0)
+        const selectedSpecialties = data.getAll('specialties').map(String).filter(Boolean)
+        const selectedLanguages = data.getAll('languages').map(String).filter(Boolean)
+        if (requestedType === 'healer') {
+          if (!data.get('professionalTitle') || (data.get('professionalTitle') === 'Other' && !String(data.get('professionalTitleOther')||'').trim())) throw new Error('Please enter your professional title.')
+          if (selectedSpecialties.length === 0 && cleanList(data.get('specialtiesOther')).length === 0) throw new Error('Please choose at least one area of expertise.')
+          if (!String(data.get('professionalBiography')||'').trim()) throw new Error('Please enter your professional biography.')
+          if (!String(data.get('education')||'').trim()) throw new Error('Please add at least one education entry.')
+          if (!String(data.get('certifications')||'').trim()) throw new Error('Please add at least one professional certification.')
+          if (healerDocuments.length === 0) throw new Error('Please attach at least one supporting document.')
+          if (!Number(data.get('yearsExperience'))) throw new Error('Please enter your years of experience.')
+          if (selectedLanguages.length === 0 && cleanList(data.get('languagesOther')).length === 0) throw new Error('Please choose at least one language.')
+          if (!String(data.get('country')||'').trim()) throw new Error('Please enter your country.')
+          if (!data.get('sessionAvailability')) throw new Error('Please choose your session availability.')
+          if (data.getAll('sessionTypes').length === 0) throw new Error('Please choose at least one session type.')
+        }
+        const healerApplication = requestedType === 'healer' ? {
+          professional_title: data.get('professionalTitle') === 'Other' ? String(data.get('professionalTitleOther')||'').trim() : String(data.get('professionalTitle')||'').trim(),
+          specialties: [...selectedSpecialties.filter(item=>item!=='Other'), ...cleanList(data.get('specialtiesOther'))],
+          biography: String(data.get('professionalBiography')||'').trim(),
+          education: parseEntries(data.get('education'), ['institution_name','program_or_degree','country','graduation_year']),
+          certifications: parseEntries(data.get('certifications'), ['certificate_name','issuing_organization','issue_date','expiration_date','certificate_number']),
+          document_names: healerDocuments.map(file=>file.name),
+          years_experience: Number(data.get('yearsExperience')||0),
+          languages: [...selectedLanguages.filter(item=>item!=='Other'), ...cleanList(data.get('languagesOther'))],
+          country: String(data.get('country')||'').trim(),
+          city: String(data.get('city')||'').trim(),
+          website: String(data.get('professionalWebsite')||'').trim(),
+          linkedin: String(data.get('linkedinProfile')||'').trim(),
+          professional_license: { license_number:String(data.get('licenseNumber')||'').trim(), licensing_authority:String(data.get('licensingAuthority')||'').trim(), country:String(data.get('licenseCountry')||'').trim() },
+          insurance_accepted: cleanList(data.get('insuranceAccepted')),
+          session_availability: String(data.get('sessionAvailability')||''),
+          session_types: data.getAll('sessionTypes').map(String)
+        } : null
+        const { data:authData, error } = await supabase.auth.signUp({ email, password, options: {
           emailRedirectTo: 'https://shirkan84.github.io/NovaResort/',
-          data: { full_name: fullName, profile_type: data.get('profileType'), country: data.get('country') }
+          data: { full_name: fullName, profile_type: 'member', requested_profile_type: requestedType, country: data.get('country'), healer_application: healerApplication }
         }})
         if (error) throw error
-        setMessage('Welcome to Nova Resort. Please check your email to verify your account.')
+        if (requestedType === 'healer' && authData.user && authData.session && healerDocuments.length) {
+          const { data:application } = await supabase.from('healer_applications').select('id').eq('user_id',authData.user.id).single()
+          for (const file of healerDocuments) {
+            const path = `${authData.user.id}/${crypto.randomUUID()}-${safeFileName(file.name)}`
+            const { error:uploadError } = await supabase.storage.from('healer-documents').upload(path,file,{contentType:file.type})
+            if (!uploadError) await supabase.from('healer_application_documents').insert({application_id:application?.id||null,user_id:authData.user.id,storage_path:path,original_name:file.name,mime_type:file.type,file_size:file.size})
+          }
+        }
+        setMessage(requestedType === 'healer' ? 'Your account was created as a Regular Member and your healer application is pending administrator review. Please check your email to verify your account.' : 'Welcome to Nova Resort. Please check your email to verify your account.')
       } else if (mode === 'reset') {
         const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: 'https://shirkan84.github.io/NovaResort/' })
         if (error) throw error
@@ -130,7 +181,7 @@ function AuthScreen() {
       <p>{mode === 'register' ? 'Join a community where you can feel seen and supported.' : mode === 'reset' ? 'We’ll send a secure reset link to your email.' : 'Sign in to return to your community.'}</p>
       {message && <div className="form-message success"><ShieldCheck size={17}/>{message}</div>}{error && <div className="form-message error">{error}</div>}
       <form onSubmit={submit}>
-        {mode === 'register' && <><label>Full name<input name="fullName" required placeholder="Your full name"/></label><div className="form-row"><label>Country<input name="country" required placeholder="Your country"/></label><label>Profile type<select name="profileType"><option value="member">Community member</option><option value="healer">Healer / Therapist</option></select></label></div></>}
+        {mode === 'register' && <><label>Full name<input name="fullName" required placeholder="Your full name"/></label><div className="form-row"><label>Country<input name="country" required placeholder="Your country"/></label><label>Profile type<select name="profileType" value={profileType} onChange={event=>setProfileType(event.target.value)}><option value="member">Community member</option><option value="healer">Healer / Therapist</option></select></label></div>{profileType==='healer'&&<section className="healer-registration"><h3>Healer Registration Requirements</h3><p>Healer accounts are created as Regular Member accounts until an administrator reviews and approves the application.</p><div className="form-row"><label>Professional Title<select name="professionalTitle" required value={professionalTitle} onChange={event=>setProfessionalTitle(event.target.value)}><option value="">Choose title</option>{professionalTitles.map(title=><option key={title}>{title}</option>)}</select></label>{professionalTitle==='Other'&&<label>Custom title<input name="professionalTitleOther" required placeholder="Your professional title"/></label>}</div><fieldset><legend>Areas of Expertise</legend><div className="option-grid">{specialties.map(item=><label key={item}><input type="checkbox" name="specialties" value={item}/>{item}</label>)}</div><input name="specialtiesOther" placeholder="Other specialties, separated by commas"/></fieldset><label>Professional Biography<textarea name="professionalBiography" required maxLength={2000} placeholder="Who you are, your approach, experience, and how you help people."/></label><label>Education<textarea name="education" required placeholder="One per line: Institution | Program or Degree | Country | Graduation Year"/></label><label>Professional Certifications<textarea name="certifications" required placeholder="One per line: Certificate | Issuing Organization | Issue Date | Expiration Date | Certificate Number"/></label><label>Upload Supporting Documents<input type="file" name="healerDocuments" required multiple accept="application/pdf,image/jpeg,image/png"/></label><div className="form-row"><label>Years of Experience<input type="number" name="yearsExperience" required min={0}/></label><label>City<input name="city" placeholder="Optional"/></label></div><fieldset><legend>Languages Spoken</legend><div className="option-grid compact">{languages.map(item=><label key={item}><input type="checkbox" name="languages" value={item}/>{item}</label>)}</div><input name="languagesOther" placeholder="Other languages, separated by commas"/></fieldset><div className="form-row"><label>Professional Website<input type="url" name="professionalWebsite" placeholder="https://"/></label><label>LinkedIn Profile<input type="url" name="linkedinProfile" placeholder="https://linkedin.com/in/..."/></label></div><div className="form-row"><label>License Number<input name="licenseNumber"/></label><label>Licensing Authority<input name="licensingAuthority"/></label></div><label>License Country<input name="licenseCountry"/></label><label>Insurance Accepted<input name="insuranceAccepted" placeholder="Optional, separated by commas"/></label><fieldset><legend>Online Session Availability</legend><div className="option-grid compact"><label><input type="radio" name="sessionAvailability" value="online" required/>Online Sessions</label><label><input type="radio" name="sessionAvailability" value="in_person"/>In-Person Sessions</label><label><input type="radio" name="sessionAvailability" value="both"/>Both</label></div></fieldset><fieldset><legend>Session Types</legend><div className="option-grid compact">{['Individual','Couples','Family','Group','Workshops','Courses'].map(item=><label key={item}><input type="checkbox" name="sessionTypes" value={item}/>{item}</label>)}</div></fieldset></section>}</>}
         <label>Email address<input type="email" name="email" required placeholder="you@example.com"/></label>
         {mode !== 'reset' && <label>Password<input type="password" name="password" required minLength={8} placeholder="At least 8 characters"/></label>}
         {mode === 'register' && <><label>Confirm password<input type="password" name="confirmPassword" required minLength={8} placeholder="Repeat your password"/></label><label className="check-label"><input type="checkbox" name="guidelines"/>I agree to the Community Guidelines and Privacy Policy.</label></>}

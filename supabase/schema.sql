@@ -10,11 +10,14 @@ create table if not exists public.profiles (
   avatar_url text,
   cover_url text,
   country text,
+  city text,
   languages text[] not null default '{}',
   about text not null default '',
   interests text[] not null default '{}',
   healing_interests text[] not null default '{}',
   profile_type text not null default 'member' check (profile_type in ('member','healer','admin')),
+  professional_title text,
+  professional_verification_status text not null default 'unverified' check (professional_verification_status in ('unverified','pending','approved','rejected','more_info_requested')),
   specialties text[] not null default '{}',
   years_experience integer,
   availability text,
@@ -94,13 +97,14 @@ create table if not exists public.video_sessions (
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  insert into public.profiles (id, full_name, display_name, country, profile_type)
+  insert into public.profiles (id, full_name, display_name, country, profile_type, professional_verification_status)
   values (
     new.id,
     coalesce(new.raw_user_meta_data->>'full_name',''),
     coalesce(new.raw_user_meta_data->>'full_name',split_part(new.email,'@',1)),
     new.raw_user_meta_data->>'country',
-    case when new.raw_user_meta_data->>'profile_type' = 'healer' then 'healer' else 'member' end
+    'member',
+    case when coalesce(new.raw_user_meta_data->>'requested_profile_type', new.raw_user_meta_data->>'profile_type') = 'healer' then 'pending' else 'unverified' end
   ) on conflict (id) do nothing;
   return new;
 end;
@@ -111,11 +115,12 @@ create trigger on_auth_user_created after insert on auth.users
 for each row execute procedure public.handle_new_user();
 
 -- Backfill users registered before this schema was installed.
-insert into public.profiles (id, full_name, display_name, country, profile_type)
+insert into public.profiles (id, full_name, display_name, country, profile_type, professional_verification_status)
 select id, coalesce(raw_user_meta_data->>'full_name',''),
        coalesce(raw_user_meta_data->>'full_name',split_part(email,'@',1)),
        raw_user_meta_data->>'country',
-       case when raw_user_meta_data->>'profile_type' = 'healer' then 'healer' else 'member' end
+       'member',
+       case when coalesce(raw_user_meta_data->>'requested_profile_type', raw_user_meta_data->>'profile_type') = 'healer' then 'pending' else 'unverified' end
 from auth.users on conflict (id) do nothing;
 
 insert into public.rooms (slug,name,description,icon,theme) values
@@ -164,8 +169,21 @@ revoke all on function public.current_user_is_admin() from public;
 grant execute on function public.current_account_type() to authenticated;
 grant execute on function public.current_user_is_admin() to authenticated;
 
+create or replace function public.current_verification_status()
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p.professional_verification_status from public.profiles p where p.id = (select auth.uid())
+$$;
+
+revoke all on function public.current_verification_status() from public;
+grant execute on function public.current_verification_status() to authenticated;
+
 create policy "community profiles are visible" on public.profiles for select to authenticated using (visibility <> 'private' or id = auth.uid());
-create policy "users update own profile" on public.profiles for update to authenticated using (id = auth.uid()) with check (id = auth.uid() and profile_type = public.current_account_type());
+create policy "users update own profile" on public.profiles for update to authenticated using (id = auth.uid()) with check (id = auth.uid() and profile_type = public.current_account_type() and professional_verification_status = public.current_verification_status());
 create policy "admins update profiles" on public.profiles for update to authenticated using (public.current_user_is_admin()) with check (public.current_user_is_admin());
 create policy "authenticated users view public rooms" on public.rooms for select to authenticated using (not is_private or exists(select 1 from public.room_members where room_id=id and user_id=auth.uid()));
 create policy "users create private rooms" on public.rooms for insert to authenticated with check (created_by=auth.uid());
