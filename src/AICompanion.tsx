@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Bot, Copy, Edit3, MessageCircleMore, Plus, RefreshCw, Search, Send, ShieldCheck, Trash2, X } from 'lucide-react'
 import { supabase } from './supabase'
 import './ai-companion.css'
@@ -11,6 +11,7 @@ type AiMessage = {
   id:string; conversation_id:string; user_id:string; role:'user'|'assistant'|'system';
   content:string; created_at:string; deleted_at:string|null
 }
+type AiError = { code:string; message:string; requestId?:string }
 
 const starters = [
   'Talk through what is on my mind',
@@ -23,6 +24,18 @@ const starters = [
   'Find a suitable verified healer',
   'Reflect on my week',
 ]
+
+const MAX_MESSAGE = 4000
+const hashConversationId = () => {
+  const value = decodeURIComponent(window.location.hash.replace(/^#\/?/, ''))
+  return value.startsWith('ai/') ? value.slice(3) : ''
+}
+const setAiRoute = (id?:string) => {
+  const next = id ? `#ai/${id}` : '#ai'
+  if (window.location.hash === next) window.dispatchEvent(new HashChangeEvent('hashchange'))
+  else window.location.hash = next
+}
+const tempId = () => `local-${Date.now()}-${Math.random().toString(16).slice(2)}`
 
 function escapeHtml(value:string) {
   return value.replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char] || char))
@@ -37,7 +50,7 @@ function markdown(value:string) {
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
     .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/^\s*[-*]\s+(.*)$/gm, '<p>• $1</p>')
+    .replace(/^\s*[-*]\s+(.*)$/gm, '<p>- $1</p>')
     .replace(/\n{2,}/g, '</p><p>')
     .replace(/\n/g, '<br/>')
 }
@@ -46,143 +59,186 @@ function timeLabel(value:string) {
   return new Date(value).toLocaleString([], { dateStyle:'medium', timeStyle:'short' })
 }
 
+function normalizeError(data:any,error:any):AiError {
+  if (data?.error?.message) return data.error
+  if (typeof data?.error === 'string') return { code:data.code || 'EDGE_ERROR', message:data.error, requestId:data.requestId }
+  if (error?.message) return { code:'NETWORK_ERROR', message:error.message }
+  return { code:'UNKNOWN', message:'Nova AI could not respond right now. Please try again.' }
+}
+
 export function AICompanion({ userId, onClose }:{ userId:string; onClose:()=>void }) {
   const [conversations,setConversations]=useState<Conversation[]>([])
   const [messages,setMessages]=useState<AiMessage[]>([])
   const [active,setActive]=useState<Conversation|null>(null)
   const [query,setQuery]=useState('')
   const [draft,setDraft]=useState('')
-  const [loading,setLoading]=useState(true)
+  const [loadingList,setLoadingList]=useState(true)
+  const [loadingMessages,setLoadingMessages]=useState(false)
+  const [creating,setCreating]=useState(false)
   const [sending,setSending]=useState(false)
-  const [notice,setNotice]=useState('')
+  const [notice,setNotice]=useState<AiError|null>(null)
   const [crisis,setCrisis]=useState(false)
-  const [localStream,setLocalStream]=useState('')
-  const cancelled=useRef(false)
+  const [routeConversationId,setRouteConversationId]=useState(()=>hashConversationId())
+  const [lastUserMessage,setLastUserMessage]=useState('')
   const bottom=useRef<HTMLDivElement>(null)
+  const listRef=useRef<HTMLDivElement>(null)
+  const nearBottom=()=>{const el=listRef.current;return !el||el.scrollHeight-el.scrollTop-el.clientHeight<110}
 
   const loadConversations=useCallback(async()=>{
-    const { data } = await supabase
+    setLoadingList(true)
+    const { data,error } = await supabase
       .from('ai_conversations')
       .select('*')
       .eq('user_id', userId)
       .is('deleted_at', null)
       .order('last_message_at', { ascending:false })
       .limit(60)
-    setConversations((data as Conversation[]) || [])
-    setLoading(false)
+    if (error) setNotice({code:'LOAD_CONVERSATIONS_FAILED',message:error.message})
+    else setConversations((data as Conversation[]) || [])
+    setLoadingList(false)
   },[userId])
 
-  const loadMessages=useCallback(async(id:string)=>{
-    const { data } = await supabase
+  const loadMessages=useCallback(async(id:string,show=true)=>{
+    if(show)setLoadingMessages(true)
+    const { data,error } = await supabase
       .from('ai_messages')
       .select('*')
       .eq('conversation_id', id)
       .is('deleted_at', null)
       .order('created_at', { ascending:true })
       .limit(160)
-    setMessages((data as AiMessage[]) || [])
+    if(error){setNotice({code:'LOAD_MESSAGES_FAILED',message:error.message});setMessages([])}
+    else setMessages((data as AiMessage[]) || [])
+    setLoadingMessages(false)
   },[])
+
+  const openConversation=useCallback(async(id:string)=>{
+    setNotice(null);setCrisis(false);setRouteConversationId(id)
+    const cached=conversations.find(c=>c.id===id)
+    if(cached){setActive(cached);loadMessages(id);return}
+    const {data,error}=await supabase.from('ai_conversations').select('*').eq('id',id).eq('user_id',userId).is('deleted_at',null).single()
+    if(error||!data){setActive(null);setMessages([]);setAiRoute();setNotice({code:'CONVERSATION_NOT_FOUND',message:'That AI conversation is not available.'});return}
+    const row=data as Conversation
+    setActive(row);setConversations(items=>items.some(c=>c.id===row.id)?items:[row,...items]);loadMessages(row.id)
+  },[conversations,loadMessages,userId])
 
   useEffect(()=>{loadConversations()},[loadConversations])
   useEffect(()=>{
+    const sync=()=>setRouteConversationId(hashConversationId())
+    window.addEventListener('hashchange',sync)
+    return()=>window.removeEventListener('hashchange',sync)
+  },[])
+  useEffect(()=>{
+    if(routeConversationId) openConversation(routeConversationId)
+    else {setActive(null);setMessages([]);setNotice(null)}
+  },[routeConversationId,openConversation])
+  useEffect(()=>{
     if(!active)return
-    loadMessages(active.id)
     const channel=supabase.channel(`ai-${active.id}`)
-      .on('postgres_changes',{event:'*',schema:'public',table:'ai_messages',filter:`conversation_id=eq.${active.id}`},()=>loadMessages(active.id))
+      .on('postgres_changes',{event:'*',schema:'public',table:'ai_messages',filter:`conversation_id=eq.${active.id}`},()=>loadMessages(active.id,false))
+      .on('postgres_changes',{event:'*',schema:'public',table:'ai_conversations',filter:`id=eq.${active.id}`},()=>loadConversations())
       .subscribe()
     return()=>{supabase.removeChannel(channel)}
-  },[active,loadMessages])
-  useEffect(()=>{bottom.current?.scrollIntoView({behavior:'smooth'})},[messages,localStream])
+  },[active,loadMessages,loadConversations])
+  useEffect(()=>{if(nearBottom())bottom.current?.scrollIntoView({behavior:'smooth'})},[messages,sending])
 
   const filtered=useMemo(()=>conversations.filter(c=>c.title.toLowerCase().includes(query.toLowerCase())),[conversations,query])
-  const previews=useMemo(()=>new Map(conversations.map(c=>{
-    const related=messages.filter(m=>m.conversation_id===c.id)
-    return [c.id, related[related.length-1]?.content || 'Private AI conversation']
-  })),[conversations,messages])
+  const remaining=MAX_MESSAGE-draft.length
 
-  async function createConversation(starter?:string) {
+  async function createConversation(open=true) {
+    if(creating)return active
+    setCreating(true);setNotice(null)
     const { data, error } = await supabase.from('ai_conversations').insert({
       user_id:userId,
-      title:starter ? starter.slice(0,80) : 'New AI conversation',
+      title:'New AI conversation',
     }).select('*').single()
-    if(error){setNotice(error.message);return null}
+    setCreating(false)
+    if(error){setNotice({code:'CREATE_FAILED',message:error.message});return null}
     const row=data as Conversation
-    setActive(row)
-    setConversations(items=>[row,...items])
-    setMessages([])
-    if(starter) await sendToAi(starter,row)
+    setConversations(items=>[row,...items.filter(item=>item.id!==row.id)])
+    if(open){setActive(row);setMessages([]);setAiRoute(row.id)}
     return row
   }
 
   async function sendToAi(text:string,conversation=active,retryLast=false) {
-    if(!conversation || sending)return
+    if(sending)return
+    let current=conversation
     const body=text.trim()
+    if(!current) current=await createConversation(true)
+    if(!current)return
     if(!body && !retryLast)return
-    if(body.length>4000){setNotice('Please keep AI messages under 4,000 characters.');return}
-    cancelled.current=false
-    setSending(true);setNotice('');setCrisis(false);setLocalStream('')
+    if(body.length>MAX_MESSAGE){setNotice({code:'MESSAGE_TOO_LONG',message:`Please keep AI messages under ${MAX_MESSAGE.toLocaleString()} characters.`});return}
+    setSending(true);setNotice(null);setCrisis(false)
     if(!retryLast){
       setDraft('')
-      setMessages(items=>[...items,{id:`local-${Date.now()}`,conversation_id:conversation.id,user_id:userId,role:'user',content:body,created_at:new Date().toISOString(),deleted_at:null}])
+      setLastUserMessage(body)
+      setMessages(items=>[...items,{id:tempId(),conversation_id:current.id,user_id:userId,role:'user',content:body,created_at:new Date().toISOString(),deleted_at:null}])
     }
-    const { data, error } = await supabase.functions.invoke('ai-chat', { body:{ conversationId:conversation.id, message:body, retryLast } })
-    if(cancelled.current){setSending(false);return}
-    if(error || data?.error){setNotice(data?.error || error?.message || 'Nova AI could not respond.');setSending(false);return}
-    const content=String(data.message?.content || '')
-    for(let i=0;i<=content.length;i+=8){
-      if(cancelled.current)break
-      setLocalStream(content.slice(0,i))
-      await new Promise(resolve=>setTimeout(resolve,14))
+    const { data, error } = await supabase.functions.invoke('ai-chat', { body:{ conversationId:current.id, message:body, retryLast } })
+    if(error || data?.error){
+      setNotice(normalizeError(data,error))
+      await loadMessages(current.id,false)
+      setSending(false)
+      return
     }
-    setLocalStream('')
     setCrisis(Boolean(data.crisis))
-    await Promise.all([loadMessages(conversation.id),loadConversations()])
+    await Promise.all([loadMessages(current.id,false),loadConversations()])
     setSending(false)
+  }
+
+  async function startFromPrompt(starter:string) {
+    const conversation=active || await createConversation(true)
+    if(conversation) await sendToAi(starter,conversation)
   }
 
   function submit(event:FormEvent) {
     event.preventDefault()
-    if(active) sendToAi(draft,active)
-    else createConversation(draft || 'Talk through what is on my mind')
+    sendToAi(draft,active)
+  }
+
+  function handleKeyDown(event:KeyboardEvent<HTMLTextAreaElement>) {
+    if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendToAi(draft,active)}
   }
 
   async function renameConversation(conversation:Conversation) {
     const title=window.prompt('Rename AI conversation',conversation.title)?.trim()
     if(!title)return
-    const { error }=await supabase.from('ai_conversations').update({title,updated_at:new Date().toISOString()}).eq('id',conversation.id)
-    if(error)setNotice(error.message);else loadConversations()
+    const { error }=await supabase.from('ai_conversations').update({title,updated_at:new Date().toISOString()}).eq('id',conversation.id).eq('user_id',userId)
+    if(error)setNotice({code:'RENAME_FAILED',message:error.message});else{setActive({...conversation,title});loadConversations()}
   }
 
   async function deleteConversation(conversation:Conversation) {
     if(!window.confirm('Delete this AI conversation?'))return
-    const { error }=await supabase.from('ai_conversations').update({deleted_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',conversation.id)
-    if(error)setNotice(error.message);else{if(active?.id===conversation.id){setActive(null);setMessages([])}loadConversations()}
+    const { error }=await supabase.from('ai_conversations').update({deleted_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',conversation.id).eq('user_id',userId)
+    if(error)setNotice({code:'DELETE_FAILED',message:error.message});else{if(active?.id===conversation.id){setActive(null);setMessages([]);setAiRoute()}loadConversations()}
   }
 
   async function clearHistory() {
-    if(!window.confirm('Delete all AI history?'))return
+    if(!window.confirm('Delete all AI history? This cannot be undone.'))return
     const { error }=await supabase.from('ai_conversations').update({deleted_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('user_id',userId).is('deleted_at',null)
-    if(error)setNotice(error.message);else{setActive(null);setMessages([]);loadConversations()}
+    if(error)setNotice({code:'CLEAR_FAILED',message:error.message});else{setActive(null);setMessages([]);setAiRoute();loadConversations()}
   }
+
+  const retryDisabled=sending||(!lastUserMessage&&messages.filter(m=>m.role==='user').length===0)
 
   return <div className="feature-overlay"><section className="ai-window">
     <aside className="ai-sidebar">
-      <header><div><h2>AI Companion</h2><p>Private reflection with Nova AI.</p></div><button onClick={onClose}><X/></button></header>
-      <button className="ai-new" onClick={()=>createConversation()}><Plus size={16}/> New AI conversation</button>
+      <header><div><h2>AI Companion</h2><p>Private reflection with Nova AI.</p></div><button onClick={onClose} aria-label="Close AI Companion"><X/></button></header>
+      <button className="ai-new" disabled={creating} onClick={()=>createConversation()}><Plus size={16}/> {creating?'Creating...':'New AI conversation'}</button>
       <label className="ai-search"><Search size={14}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search AI conversations"/></label>
-      <div className="ai-conversation-list">{loading?<p>Loading...</p>:filtered.length===0?<p>No AI conversations yet.</p>:filtered.map(c=><button key={c.id} className={active?.id===c.id?'active':''} onClick={()=>setActive(c)}><Bot size={17}/><span><b>{c.title}</b><small>{previews.get(c.id)}</small><em>{timeLabel(c.last_message_at)}</em></span></button>)}</div>
-      <button className="ai-clear" onClick={clearHistory}><Trash2 size={14}/> Delete all AI history</button>
+      <div className="ai-conversation-list">{loadingList?<p>Loading conversations...</p>:filtered.length===0?<p>No AI conversations yet.</p>:filtered.map(c=><button key={c.id} className={active?.id===c.id?'active':''} onClick={()=>setAiRoute(c.id)}><Bot size={17}/><span><b>{c.title}</b><small>Private AI conversation</small><em>{timeLabel(c.last_message_at)}</em></span></button>)}</div>
+      <div className="ai-danger"><button className="ai-clear" onClick={clearHistory}><Trash2 size={14}/> Delete all AI history</button></div>
     </aside>
     <main className="ai-chat">
       {active ? <>
-        <header><div className="ai-avatar"><Bot/></div><div><h2>{active.title}</h2><p>Nova AI Companion · AI-generated support</p></div><button onClick={()=>renameConversation(active)}><Edit3/></button><button onClick={()=>deleteConversation(active)}><Trash2/></button></header>
-        {crisis&&<div className="ai-crisis"><AlertTriangle/><div><b>Emergency support</b><p>If there is immediate danger, contact local emergency services now and reach out to someone nearby. AI detection can make mistakes and is not a substitute for human help.</p></div></div>}
-        <div className="ai-messages">{messages.length===0&&!sending?<div className="ai-empty"><Bot/><h3>Start gently</h3><p>Choose a starter or write what you want to reflect on.</p></div>:messages.map(m=><article key={m.id} className={m.role==='user'?'ai-message user':'ai-message assistant'}><span>{m.role==='user'?'You':'AI'}</span><div><div dangerouslySetInnerHTML={{__html:markdown(m.content)}}/><small>{timeLabel(m.created_at)}{m.role==='assistant'&&' · AI-generated'}</small>{m.role==='assistant'&&<button onClick={()=>navigator.clipboard?.writeText(m.content)}><Copy size={13}/> Copy</button>}</div></article>)}{localStream&&<article className="ai-message assistant streaming"><span>AI</span><div><div dangerouslySetInnerHTML={{__html:markdown(localStream)}}/><small>Writing...</small></div></article>}{sending&&!localStream&&<div className="ai-thinking">Nova AI is reflecting...</div>}<div ref={bottom}/></div>
-        <div className="ai-tools"><button onClick={()=>sendToAi('',active,true)} disabled={sending||messages.length===0}><RefreshCw size={14}/> Retry response</button><button onClick={()=>{cancelled.current=true;setSending(false);setLocalStream('')}} disabled={!sending}>Stop generation</button></div>
-        <form className="ai-compose" onSubmit={submit}><textarea value={draft} onChange={e=>setDraft(e.target.value)} maxLength={4000} placeholder="Write to Nova AI Companion..."/><button disabled={sending||!draft.trim()}><Send size={16}/></button></form>
-        <div className="ai-notice"><ShieldCheck size={14}/> Nova AI can make mistakes and does not replace professional mental-health or medical support. OpenAI API billing is separate from ChatGPT Plus.</div>
-      </> : <div className="ai-starters"><div className="ai-hero"><div className="ai-avatar"><Bot/></div><h2>Nova AI Companion</h2><p>A private AI room for mindfulness, journaling, session preparation, and gentle reflection.</p></div><div className="starter-grid">{starters.map(starter=><button key={starter} onClick={()=>createConversation(starter)}><MessageCircleMore size={16}/>{starter}</button>)}</div><div className="ai-privacy"><b>Privacy</b><p>AI conversations are private to you. Nova AI is not a verified healer and cannot access private messages, reports, blocked users, passwords, or personal data unless a future opt-in explicitly sends limited context.</p></div></div>}
-      {notice&&<div className="ai-error">{notice}</div>}
+        <header><div className="ai-avatar"><Bot/></div><div><h2>{active.title}</h2><p>Nova AI Companion - AI-generated support</p></div><button aria-label="Rename conversation" onClick={()=>renameConversation(active)}><Edit3/></button><button aria-label="Delete conversation" onClick={()=>deleteConversation(active)}><Trash2/></button></header>
+        {crisis&&<div className="ai-crisis"><AlertTriangle/><div><b>Emergency support</b><p>If there is immediate danger, contact local emergency services now and reach out to someone nearby. Nova AI is not emergency or professional care.</p></div></div>}
+        <div className="ai-messages" ref={listRef}>{loadingMessages?<div className="ai-thinking">Loading messages...</div>:messages.length===0&&!sending?<div className="ai-empty"><Bot/><h3>Start gently</h3><p>Choose a starter below or write what you want to reflect on.</p><div className="starter-row">{starters.slice(0,4).map(starter=><button key={starter} onClick={()=>startFromPrompt(starter)}>{starter}</button>)}</div></div>:messages.map(m=><article key={m.id} className={m.role==='user'?'ai-message user':'ai-message assistant'}><span>{m.role==='user'?'You':'AI'}</span><div><div dangerouslySetInnerHTML={{__html:markdown(m.content)}}/><small>{timeLabel(m.created_at)}{m.role==='assistant'&&' - AI-generated'}{m.id.startsWith('local-')&&' - sending'}</small>{m.role==='assistant'&&<button onClick={()=>navigator.clipboard?.writeText(m.content)}><Copy size={13}/> Copy</button>}</div></article>)}{sending&&<div className="ai-thinking">Nova AI is reflecting...</div>}<div ref={bottom}/></div>
+        <div className="ai-tools"><button onClick={()=>sendToAi('',active,true)} disabled={retryDisabled}><RefreshCw size={14}/> Retry response</button><button onClick={()=>setSending(false)} disabled={!sending}>Stop generation</button></div>
+        <form className="ai-compose" onSubmit={submit}><textarea value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={handleKeyDown} maxLength={MAX_MESSAGE} placeholder="Write to Nova AI Companion..."/><button disabled={sending||!draft.trim()} aria-label="Send message"><Send size={16}/></button><small>{remaining.toLocaleString()} characters left</small></form>
+        <div className="ai-notice"><ShieldCheck size={14}/> Nova AI can make mistakes and does not replace professional mental-health, medical, or emergency support.</div>
+      </> : <div className="ai-starters"><div className="ai-hero"><div className="ai-avatar"><Bot/></div><h2>Nova AI Companion</h2><p>A private AI room for mindfulness, journaling, session preparation, and gentle reflection.</p></div><div className="starter-grid">{starters.map(starter=><button key={starter} disabled={creating||sending} onClick={()=>startFromPrompt(starter)}><MessageCircleMore size={16}/>{starter}</button>)}</div><div className="ai-privacy"><b>Privacy</b><p>AI conversations are private to you. Nova AI is not a verified healer and cannot access private messages, reports, blocked users, passwords, or unrelated personal data.</p></div></div>}
+      {notice&&<div className="ai-error"><b>{notice.code}</b><span>{notice.message}{notice.requestId?` (${notice.requestId})`:''}</span></div>}
     </main>
   </section></div>
 }
