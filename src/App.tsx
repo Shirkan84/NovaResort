@@ -422,7 +422,7 @@ function App() {
     </main>
     {menuOpen && <button className="backdrop" aria-label="Close menu" onClick={() => setMenuOpen(false)}/>} 
     {feature==='discover' && <DiscoverPeople userId={session.user.id} onClose={closeOverlay} onOpenRoom={openRoom}/>} 
-    {selectedRoom && (selectedRoom.is_private ? <PrivateChatRoom room={selectedRoom} userId={session.user.id} onClose={closeOverlay}/> : <ChatRoom room={selectedRoom} userId={session.user.id} onClose={closeOverlay}/>)} 
+    {selectedRoom && (selectedRoom.is_private ? <PrivateChatRoom room={selectedRoom} userId={session.user.id} onClose={closeOverlay} onOpenProfile={openProfile}/> : <ChatRoom room={selectedRoom} userId={session.user.id} onClose={closeOverlay}/>)} 
     {feature==='people' && <PeopleDirectory userId={session.user.id} onClose={closeOverlay} onOpenRoom={openRoom}/>} 
     {feature==='healers' && <HealersDirectory userId={session.user.id} onClose={closeOverlay} onOpenRoom={openRoom} onOpenProfile={openProfile} onOpenSessions={()=>openFeature('sessions')}/>} 
     {feature==='connections' && <Connections userId={session.user.id} onClose={closeOverlay} onOpenRoom={openRoom}/>} 
