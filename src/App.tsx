@@ -19,7 +19,7 @@ import './social-home.css'
 type Room = {
   title: string; description: string; people: number; color: string; icon: string; tags: string[]
 }
-type LiveProfile = { id:string;full_name:string;display_name:string|null;avatar_url:string|null;profile_type:string;specialties:string[]|null;interests?:string[]|null;about:string|null;country?:string|null;online:boolean|null;visibility?:string|null;next_session?:NextSession|null }
+type LiveProfile = { id:string;full_name:string;display_name:string|null;avatar_url:string|null;profile_type:string;professional_title?:string|null;professional_verification_status?:string|null;specialties:string[]|null;interests?:string[]|null;about:string|null;country?:string|null;online:boolean|null;visibility?:string|null;next_session?:NextSession|null }
 type RecentMessage = { id:string;body:string;created_at:string;profiles?:{full_name:string;avatar_url:string|null}|null;rooms?:{id:string;name:string}|null }
 type Friendship = { id:string; requester_id:string; addressee_id:string; status:string }
 type NextSession = { id:string; title:string; starts_at:string; host_id:string }
@@ -85,7 +85,8 @@ function Logo() {
 const profileName = (profile:LiveProfile) => profile.display_name || profile.full_name || 'Nova member'
 const profileInitials = (name?:string|null) => (name || 'N').split(' ').map(part => part[0]).join('').slice(0,2).toUpperCase()
 const healerRoles = [...PROFESSIONAL_ROLES]
-const roleLabel = (profile:LiveProfile) => profile.profile_type === 'healer' ? 'Healer / Therapist' : profile.profile_type.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
+const approvedProfessional = (profile:LiveProfile) => profile.professional_verification_status === 'approved' && healerRoles.includes(profile.profile_type as typeof healerRoles[number])
+const roleLabel = (profile:LiveProfile) => approvedProfessional(profile) ? (profile.professional_title || 'Verified Healer') : profile.profile_type === 'admin' ? 'Administrator' : 'Regular Member'
 const relationshipFor = (id:string, rows:Friendship[]) => rows.find(row => row.requester_id === id || row.addressee_id === id)
 
 function AuthScreen() {
@@ -215,6 +216,7 @@ function App() {
   const [profilePreview,setProfilePreview] = useState<LiveProfile|null>(null)
   const [currentAvatar,setCurrentAvatar] = useState<string|null>(null)
   const [podcastPlayer,setPodcastPlayer] = useState<PlayerEpisode|null>(null)
+  const [signingOut,setSigningOut] = useState(false)
   const [metrics,setMetrics] = useState({members:0,online:0,healers:0,rooms:0,sessions:0,notifications:0,connections:0})
 
   useEffect(() => {
@@ -263,7 +265,7 @@ function App() {
         }
         const { data, error } = await supabase
           .from('profiles')
-          .select('id,full_name,display_name,avatar_url,country,profile_type,about,interests,specialties,online,visibility')
+          .select('id,full_name,display_name,avatar_url,country,profile_type,professional_title,professional_verification_status,about,interests,specialties,online,visibility')
           .eq('id', route.profileId)
           .neq('visibility','private')
           .single()
@@ -327,6 +329,21 @@ function App() {
   const openHealers = () => setRoute('healers')
   const openPodcast = (id?:string) => setRoute(id === 'manage' ? 'podcasts/manage' : id ? `podcasts/${id}` : 'podcasts')
   const openPodcastEpisode = (podcastId:string, episodeId:string) => setRoute(`podcasts/${podcastId}/episodes/${episodeId}`)
+  async function signOut() {
+    setSigningOut(true)
+    try {
+      setSelectedRoom(null);setFeature(null);setProfilePreview(null);setPodcastPlayer(null)
+      setDbRooms([]);setLiveHealers([]);setRecentMessages([]);setFriendships([]);setCurrentAvatar(null)
+      setMetrics({members:0,online:0,healers:0,rooms:0,sessions:0,notifications:0,connections:0})
+      await supabase.removeAllChannels()
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
+      setRoute('home')
+    } catch {
+      act('We could not sign you out. Please try again.')
+      setSigningOut(false)
+    }
+  }
   async function startPrivateMessage(person:LiveProfile){const {data,error}=await supabase.rpc('create_private_room',{other_user:person.id});if(error){act(error.message);return}openRoom({id:data,name:profileName(person),description:'Private two-person conversation',icon:'♢',theme:'sage',is_private:true})}
   async function connectWith(person:LiveProfile){
     if (!session) return
@@ -369,7 +386,7 @@ function App() {
       <div className="side-bottom">
         <button className="nav-item" onClick={() => openFeature('profile')}><Settings size={19}/><span>Settings</span></button>
         <button className="profile-mini" onClick={() => openFeature('profile')}><div className="avatar user">{currentAvatar?<img src={currentAvatar} alt=""/>:initials}</div><div><b>{name}</b><span>Community member</span></div><MoreHorizontal size={18}/></button>
-        <button className="signout" onClick={() => supabase.auth.signOut()}>Sign out</button>
+        <button className="signout" disabled={signingOut} onClick={signOut}>{signingOut?'Signing out...':'Sign out'}</button>
       </div>
     </aside>
 
@@ -383,6 +400,7 @@ function App() {
           <button className="icon-btn" aria-label="Toggle theme" onClick={() => setDark(!dark)}>{dark ? <Sun size={19}/> : <Moon size={19}/>}</button>
           <button className="icon-btn notification" aria-label="Notifications" onClick={() => openFeature(metrics.connections>0?'messages':'notifications')}><Bell size={20}/>{metrics.notifications>0&&<i>{metrics.notifications}</i>}</button>
           <button className="user-chip" onClick={()=>openFeature('profile')}><div className="avatar user">{currentAvatar?<img src={currentAvatar} alt=""/>:initials}</div><ChevronDown size={15}/></button>
+          <button className="header-signout" disabled={signingOut} onClick={signOut}>{signingOut?'Signing out...':'Sign out'}</button>
         </div>
       </header>
 
@@ -471,7 +489,7 @@ function App() {
     {feature==='sessions' && <SessionsPage userId={session.user.id} onClose={closeOverlay}/>} 
     {feature==='notifications' && <Notifications userId={session.user.id} onClose={closeOverlay}/>} 
     {feature==='safety' && <SafetyCenter onClose={closeOverlay}/>} 
-    {profilePreview && <div className="feature-overlay"><section className="profile-window public-profile-window"><header><div><h2>{profileName(profilePreview)}</h2><p>{roleLabel(profilePreview)}{profilePreview.country?` · ${profilePreview.country}`:''}</p></div><button onClick={closeOverlay}><X/></button></header><div className="public-profile-body"><span className="avatar healer rose public-profile-avatar">{profilePreview.avatar_url?<img src={profilePreview.avatar_url} alt={`${profileName(profilePreview)} profile photo`} loading="lazy"/>:profileInitials(profileName(profilePreview))}<i className={profilePreview.online?'online':''}/></span><p>{profilePreview.about||'This professional has not added a bio yet.'}</p><div className="healer-tags">{[...(profilePreview.specialties||[]),...(profilePreview.interests||[])].slice(0,6).map(tag=><span key={tag}>{tag}</span>)}</div><div className="healer-actions"><button onClick={()=>connectWith(profilePreview)}><UserPlus size={13}/> Connect</button><button onClick={()=>startPrivateMessage(profilePreview)}><MessageCircleMore size={13}/> Message</button><button onClick={()=>openFeature('sessions')}>View sessions</button></div></div></section></div>} 
+    {profilePreview && <div className="feature-overlay"><section className="profile-window public-profile-window"><header><div><h2>{profileName(profilePreview)}</h2><p>{roleLabel(profilePreview)}{profilePreview.country?` · ${profilePreview.country}`:''}</p></div><button onClick={closeOverlay}><X/></button></header><div className="public-profile-body"><span className="avatar healer rose public-profile-avatar">{profilePreview.avatar_url?<img src={profilePreview.avatar_url} alt={`${profileName(profilePreview)} profile photo`} loading="lazy"/>:profileInitials(profileName(profilePreview))}<i className={profilePreview.online?'online':''}/></span><p>{profilePreview.about||'This member has not added an introduction yet.'}</p><div className="healer-tags">{[...(approvedProfessional(profilePreview)?profilePreview.specialties||[]:[]),...(profilePreview.interests||[])].slice(0,6).map(tag=><span key={tag}>{tag}</span>)}</div><div className="healer-actions"><button onClick={()=>connectWith(profilePreview)}><UserPlus size={13}/> Connect</button><button onClick={()=>startPrivateMessage(profilePreview)}><MessageCircleMore size={13}/> Message</button>{approvedProfessional(profilePreview)&&<button onClick={()=>openFeature('sessions')}>View sessions</button>}</div></div></section></div>}
     {profilePreview && <div className="profile-podcast-sidecar"><ProfilePodcastSection profileId={profilePreview.id} onOpenPodcast={openPodcast}/></div>}
     <PodcastMiniPlayer episode={podcastPlayer} onClose={() => setPodcastPlayer(null)}/>
     {notice && <div className="toast"><ShieldCheck size={17}/>{notice}</div>}

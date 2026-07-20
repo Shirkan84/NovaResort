@@ -1,10 +1,16 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
-import { Bell, Camera, Check, ChevronLeft, Heart, MessageCircleMore, Send, UsersRound, Video, X } from 'lucide-react'
+import { Bell, Camera, Check, ChevronLeft, Heart, LogOut, MessageCircleMore, Send, ShieldCheck, UsersRound, Video, X } from 'lucide-react'
 import { supabase } from './supabase'
 import './community-lobby.css'
 
 export type DbRoom = { id:string; name:string; description:string; icon:string; theme:string; is_private:boolean; tags?:string[]; total_members?:number; online_members?:number }
-type Profile = { id:string; full_name:string; display_name:string|null; avatar_url:string|null; country:string|null; profile_type:string; about:string; interests:string[]; specialties:string[]; online:boolean }
+type Profile = {
+  id:string; full_name:string; display_name:string|null; avatar_url:string|null; country:string|null; city?:string|null;
+  profile_type:string; professional_verification_status?:string|null; professional_title?:string|null; years_experience?:number|null;
+  availability?:string|null; about:string; interests:string[]; specialties:string[]; languages?:string[]; online:boolean;
+  visibility?:string|null; discoverable?:boolean|null; birth_date?:string|null; birth_date_visibility?:string|null; pronouns?:string|null;
+  personal_website?:string|null; professional_website?:string|null; linkedin_url?:string|null;
+}
 type Message = { id:string; body:string; sender_id:string; created_at:string; edited_at?:string|null; updated_at?:string|null; read_at?:string|null; reply_to?:string|null; pinned?:boolean; profiles?:{full_name:string;avatar_url:string|null}|null }
 type Reaction = { message_id:string; emoji:string; user_id:string }
 type Friendship = { id:string; requester_id:string; addressee_id:string; status:string }
@@ -13,6 +19,14 @@ type Notice = { id:string; type:string; title:string; body:string|null; entity_i
 const QUICK_REACTIONS = ['❤️','🙏','🌿','✨']
 const initials = (name?:string|null) => (name || 'N').split(' ').map(x=>x[0]).join('').slice(0,2)
 const accountTypeLabel = (value?:string|null) => value === 'healer' ? 'Healer' : value === 'therapist' ? 'Therapist' : value === 'coach' ? 'Coach' : value === 'mindfulness_teacher' ? 'Mindfulness Teacher' : value === 'wellness_professional' ? 'Wellness Professional' : value === 'admin' ? 'Administrator' : 'Regular Member'
+const professionalRoles = ['healer','therapist','coach','mindfulness_teacher','wellness_professional','admin']
+const isApprovedHealer = (profile?:Profile|null) => Boolean(profile && professionalRoles.includes(profile.profile_type) && profile.professional_verification_status === 'approved')
+const splitList = (value:FormDataEntryValue|null) => String(value||'').split(',').map(x=>x.trim()).filter(Boolean)
+const safeUrl = (value:FormDataEntryValue|null) => {
+  const url = String(value||'').trim()
+  if (!url) return null
+  return /^https?:\/\//i.test(url) ? url : `https://${url}`
+}
 const healerRequestBody = (email?:string|null) => `Hello,
 
 I would like to request that my Nova Resort account be upgraded from Regular Member to Healer.
@@ -125,11 +139,46 @@ export function PrivateChats({onClose,onOpenRoom}:{onClose:()=>void;onOpenRoom:(
 }
 
 export function EditProfile({userId,onClose}:{userId:string;onClose:()=>void}){
-  const [profile,setProfile]=useState<Profile|null>(null),[email,setEmail]=useState<string|null>(null),[saved,setSaved]=useState(false),[uploading,setUploading]=useState(false)
+  const [profile,setProfile]=useState<Profile|null>(null),[email,setEmail]=useState<string|null>(null),[saved,setSaved]=useState(false),[uploading,setUploading]=useState(false),[error,setError]=useState(''),[signingOut,setSigningOut]=useState(false)
   useEffect(()=>{supabase.from('profiles').select('*').eq('id',userId).single().then(({data})=>setProfile(data as Profile));supabase.auth.getUser().then(({data})=>setEmail(data.user?.email||null))},[userId])
-  async function save(e:FormEvent<HTMLFormElement>){e.preventDefault();const d=new FormData(e.currentTarget);const {error}=await supabase.from('profiles').update({display_name:d.get('display_name'),country:d.get('country'),about:d.get('about'),interests:String(d.get('interests')||'').split(',').map(x=>x.trim()).filter(Boolean),specialties:String(d.get('specialties')||'').split(',').map(x=>x.trim()).filter(Boolean),updated_at:new Date().toISOString()}).eq('id',userId);if(!error)setSaved(true)}
-  async function upload(file?:File){if(!file)return;if(file.size>5242880){alert('Please choose an image smaller than 5 MB.');return}setUploading(true);const ext=file.name.split('.').pop()?.toLowerCase()||'jpg',path=`${userId}/profile.${ext}`;const {error}=await supabase.storage.from('avatars').upload(path,file,{upsert:true,contentType:file.type});if(!error){const {data}=supabase.storage.from('avatars').getPublicUrl(path);const avatar_url=`${data.publicUrl}?v=${Date.now()}`;await supabase.from('profiles').update({avatar_url,updated_at:new Date().toISOString()}).eq('id',userId);setProfile(p=>p?{...p,avatar_url}:p)}else alert(error.message);setUploading(false)}
-  return <div className="feature-overlay"><section className="profile-window"><header><div><h2>Your profile</h2><p>Help the right people connect with you.</p></div><button onClick={onClose}><X/></button></header>{profile&&<form onSubmit={save}><div className="profile-photo-editor"><span>{profile.avatar_url?<img src={profile.avatar_url} alt="Profile"/>:initials(profile.display_name||profile.full_name)}</span><label><Camera/>{uploading?'Uploading…':'Add profile picture'}<input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={e=>upload(e.target.files?.[0])}/></label><small>JPG, PNG or WebP · Max 5 MB</small></div><label>Display name<input name="display_name" defaultValue={profile.display_name||profile.full_name}/></label><div className="form-row"><label>Country<input name="country" defaultValue={profile.country||''}/></label><label>Account type<input readOnly value={accountTypeLabel(profile.profile_type)} aria-readonly="true"/></label></div>{profile.profile_type==='member'&&<section className="healer-request-card"><h3>Become a Verified Healer</h3><p>If you are currently registered as a Regular Member and would like to become a Healer, you must submit a request for administrator review. Your application will be reviewed before your account can be upgraded.</p><button type="button" onClick={()=>{window.location.href=healerRequestHref(email)}}>Request Healer Account</button></section>}<label>About me<textarea name="about" defaultValue={profile.about} placeholder="Share a little about yourself…"/></label><label>Interests <small>Separate with commas</small><input name="interests" defaultValue={(profile.interests||[]).join(', ')}/></label><label>Healing specialties <small>For approved healers: meditation, mindfulness, emotional support…</small><input name="specialties" defaultValue={(profile.specialties||[]).join(', ')}/></label><button className="save-profile">{saved?'Saved ✓':'Save profile'}</button></form>}</section></div>
+  async function save(e:FormEvent<HTMLFormElement>){
+    e.preventDefault();setError('');setSaved(false)
+    const d=new FormData(e.currentTarget)
+    const birthDate=String(d.get('birth_date')||'')
+    if (birthDate && new Date(birthDate) > new Date()) { setError('Date of birth cannot be in the future.'); return }
+    const payload:Record<string,unknown>={
+      display_name:String(d.get('display_name')||'').trim(),
+      country:String(d.get('country')||'').trim()||null,
+      city:String(d.get('city')||'').trim()||null,
+      about:String(d.get('about')||'').trim().slice(0,500),
+      interests:splitList(d.get('interests')),
+      languages:splitList(d.get('languages')),
+      birth_date:birthDate||null,
+      birth_date_visibility:String(d.get('birth_date_visibility')||'private'),
+      pronouns:String(d.get('pronouns')||'').trim()||null,
+      personal_website:safeUrl(d.get('personal_website')),
+      visibility:String(d.get('visibility')||'community'),
+      discoverable:d.get('discoverable') === 'on',
+      updated_at:new Date().toISOString()
+    }
+    if (isApprovedHealer(profile)) {
+      Object.assign(payload,{
+        professional_title:String(d.get('professional_title')||'').trim()||null,
+        specialties:splitList(d.get('specialties')),
+        availability:String(d.get('availability')||'').trim()||null,
+        years_experience:Number(d.get('years_experience')||0) || null,
+        professional_website:safeUrl(d.get('professional_website')),
+        linkedin_url:safeUrl(d.get('linkedin_url'))
+      })
+    }
+    const {error}=await supabase.from('profiles').update(payload).eq('id',userId)
+    if(error){setError(error.message);return}
+    setProfile(p=>p?{...p,...payload} as Profile:p);setSaved(true)
+  }
+  async function signOut(){setSigningOut(true);setError('');const {error}=await supabase.auth.signOut();if(error){setError('We could not sign you out. Please try again.');setSigningOut(false)}}
+  async function upload(file?:File){if(!file)return;if(!['image/jpeg','image/png','image/webp','image/gif'].includes(file.type)){setError('Please choose a JPG, PNG, WebP, or GIF image.');return}if(file.size>5242880){setError('Please choose an image smaller than 5 MB.');return}setUploading(true);setError('');const ext=file.name.split('.').pop()?.toLowerCase()||'jpg',path=`${userId}/profile.${ext}`;const {error}=await supabase.storage.from('avatars').upload(path,file,{upsert:true,contentType:file.type});if(!error){const {data}=supabase.storage.from('avatars').getPublicUrl(path);const avatar_url=`${data.publicUrl}?v=${Date.now()}`;await supabase.from('profiles').update({avatar_url,updated_at:new Date().toISOString()}).eq('id',userId);setProfile(p=>p?{...p,avatar_url}:p)}else setError(error.message);setUploading(false)}
+  const approved=isApprovedHealer(profile),pending=profile?.professional_verification_status === 'pending' || profile?.professional_verification_status === 'more_info_requested'
+  return <div className="feature-overlay"><section className="profile-window profile-editor-window"><header><div><h2>Your profile</h2><p>Help the right people connect with you.</p></div><button onClick={onClose}><X/></button></header>{profile&&<form onSubmit={save}>{error&&<div className="form-message error">{error}</div>}<section className="profile-section"><h3>Personal Information</h3><div className="profile-photo-editor"><span>{profile.avatar_url?<img src={profile.avatar_url} alt="Profile"/>:initials(profile.display_name||profile.full_name)}</span><label><Camera/>{uploading?'Uploading…':'Add profile picture'}<input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={e=>upload(e.target.files?.[0])}/></label><small>JPG, PNG, WebP or GIF · Max 5 MB</small></div><label>Display name<input name="display_name" required defaultValue={profile.display_name||profile.full_name}/></label><div className="form-row"><label>Pronouns<input name="pronouns" defaultValue={profile.pronouns||''} placeholder="Optional"/></label><label>Account type<input readOnly value={accountTypeLabel(profile.profile_type)} aria-readonly="true"/></label></div></section><section className="profile-section"><h3>About Me</h3><label>Short biography<textarea name="about" maxLength={500} defaultValue={profile.about} placeholder="Share a little about yourself…"/></label><label>Interests <small>Separate with commas</small><input name="interests" defaultValue={(profile.interests||[]).join(', ')}/></label><label>Languages <small>Separate with commas</small><input name="languages" defaultValue={(profile.languages||[]).join(', ')}/></label></section><section className="profile-section"><h3>Location and Privacy</h3><div className="form-row"><label>Country<input name="country" defaultValue={profile.country||''}/></label><label>City<input name="city" defaultValue={profile.city||''}/></label></div><div className="form-row"><label>Date of birth<input type="date" name="birth_date" defaultValue={profile.birth_date||''}/></label><label>Birthday privacy<select name="birth_date_visibility" defaultValue={profile.birth_date_visibility||'private'}><option value="private">Private</option><option value="age_range">Show age range only</option><option value="birthday_only">Show birthday without year</option></select></label></div><label>Personal website or social link<input type="url" name="personal_website" defaultValue={profile.personal_website||''} placeholder="https://"/></label><div className="form-row"><label>Profile visibility<select name="visibility" defaultValue={profile.visibility||'community'}><option value="community">Community</option><option value="friends">Friends only</option><option value="private">Private</option></select></label><label className="check-label"><input type="checkbox" name="discoverable" defaultChecked={profile.discoverable!==false}/>Show me in member discovery</label></div></section>{pending&&<section className="healer-request-card"><h3>Your healer application is currently under review.</h3><p>You can edit your regular member profile while an administrator reviews your professional application. Healer tools and public healer fields stay hidden until approval.</p></section>}{!approved&&profile.profile_type==='member'&&!pending&&<section className="healer-request-card"><h3>Become a Verified Healer</h3><p>If you are currently registered as a Regular Member and would like to become a Healer, you must submit a request for administrator review. Your application will be reviewed before your account can be upgraded.</p><button type="button" onClick={()=>{window.location.href=healerRequestHref(email)}}>Request Healer Account</button></section>}{approved&&<section className="profile-section professional-profile-section"><h3><ShieldCheck size={16}/> Professional Healer Profile</h3><label>Professional title<input name="professional_title" defaultValue={profile.professional_title||''} placeholder="Therapist, Life Coach, Mindfulness Teacher…"/></label><label>Areas of Treatment and Expertise <small>Separate with commas</small><input name="specialties" defaultValue={(profile.specialties||[]).join(', ')}/></label><label>Therapy methods and session information<textarea name="availability" defaultValue={profile.availability||''} placeholder="CBT, mindfulness-based therapy, online sessions, workshops, booking availability…"/></label><div className="form-row"><label>Years of professional experience<input type="number" min={0} name="years_experience" defaultValue={profile.years_experience||''}/></label><label>Professional website<input type="url" name="professional_website" defaultValue={profile.professional_website||''} placeholder="https://"/></label></div><label>LinkedIn profile<input type="url" name="linkedin_url" defaultValue={profile.linkedin_url||''} placeholder="https://linkedin.com/in/..."/></label></section>}<section className="profile-section account-section"><h3>Account</h3><button type="button" className="signout-inline" disabled={signingOut} onClick={signOut}><LogOut size={16}/>{signingOut?'Signing out…':'Sign Out'}</button></section><button className="save-profile">{saved?'Saved ✓':'Save profile'}</button></form>}</section></div>
 }
 
 export function Notifications({userId,onClose}:{userId:string;onClose:()=>void}){
