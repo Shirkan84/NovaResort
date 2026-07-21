@@ -11,14 +11,23 @@ const ROUTE_TO_BUTTON: Record<string, string> = {
   connections: 'Connections',
   sessions: 'Sessions',
   'sessions/upcoming': 'Sessions',
-  notifications: 'Notifications',
+  notifications: 'Bell',
   profile: 'Settings',
-  'profile/edit': 'Settings',
   settings: 'Settings',
   safety: 'Visit safety center',
   'community-guidelines': 'Visit safety center',
   privacy: 'Visit safety center',
   terms: 'Visit safety center',
+}
+
+function isPodcastRoute(route: string): boolean {
+  if (route === 'podcasts' || route === 'podcasts/manage') return true
+  const parts = route.split('/')
+  return parts[0] === 'podcasts' && (parts.length === 2 || (parts.length >= 3 && parts[2] === 'episodes'))
+}
+
+function isProfileRoute(route: string): boolean {
+  return route.startsWith('profile/')
 }
 
 const BASE_PATH = import.meta.env.VITE_BASE_PATH || '/NovaResort'
@@ -51,7 +60,15 @@ function applyRoute(attempt = 0) {
     clickMatchingButton('Home')
     return
   }
-  if (route.startsWith('room/')) return
+  if (route.startsWith('room/') || isProfileRoute(route)) return
+  if (isPodcastRoute(route)) {
+    if (route === 'podcasts/manage') {
+      if (!clickMatchingButton('Podcasts') && attempt < 20) {
+        window.setTimeout(() => applyRoute(attempt + 1), 250)
+      }
+    }
+    return
+  }
   const label = ROUTE_TO_BUTTON[route]
   if (!label) return
   if (!clickMatchingButton(label) && attempt < 20) {

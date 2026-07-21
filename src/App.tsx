@@ -24,7 +24,7 @@ type RecentMessage = { id:string;body:string;created_at:string;profiles?:{full_n
 type Friendship = { id:string; requester_id:string; addressee_id:string; status:string }
 type NextSession = { id:string; title:string; starts_at:string; host_id:string }
 type Feature = 'discover'|'people'|'healers'|'profile'|'notifications'|'messages'|'safety'|'connections'|'sessions'|'ai'|'podcasts'
-type AppRoute = { feature: Feature | null; roomId: string | null; profileId: string | null; podcastId: string | null; episodeId: string | null; podcastStudio: boolean }
+type AppRoute = { feature: Feature | null; roomId: string | null; profileId: string | null; podcastId: string | null; episodeId: string | null; podcastStudio: boolean; notFound: boolean }
 
 const BASE_URL = import.meta.env.VITE_BASE_URL || 'https://shirkan84.github.io/NovaResort/'
 const BASE_PATH = import.meta.env.VITE_BASE_PATH || '/NovaResort'
@@ -34,7 +34,7 @@ function routeFromHash(): AppRoute {
     .replace(new RegExp('^' + BASE_PATH.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '/?'), '')
     .replace(/^\/+|\/+$/g, '')
   const value = decodeURIComponent(window.location.hash.replace(/^#\/?/, '') || pathRoute || 'home')
-  const base = { feature: null, roomId: null, profileId: null, podcastId: null, episodeId: null, podcastStudio: false }
+  const base = { feature: null, roomId: null, profileId: null, podcastId: null, episodeId: null, podcastStudio: false, notFound: false }
   if (value.startsWith('room/')) return { ...base, roomId: value.slice(5) || null }
   if (value.startsWith('profile/')) return { ...base, profileId: value.slice(8) || null }
   if (value === 'podcasts/manage') return { ...base, feature: 'podcasts', podcastStudio: true }
@@ -53,6 +53,7 @@ function routeFromHash(): AppRoute {
   if (value === 'notifications') return { ...base, feature: 'notifications' }
   if (value === 'profile' || value === 'settings') return { ...base, feature: 'profile' }
   if (value === 'safety' || value === 'community-guidelines' || value === 'privacy' || value === 'terms') return { ...base, feature: 'safety' }
+  if (value !== 'home' && value !== '') return { ...base, notFound: true }
   return base
 }
 
@@ -449,6 +450,7 @@ function App() {
       </header>
 
       <div className="content">
+        {route.notFound ? <section className="welcome"><div style={{gridColumn:'1/-1',textAlign:'center',padding:'80px 20px'}}><p className="eyebrow">PAGE NOT FOUND</p><h1>This page doesn't exist.</h1><p className="platform-intro">The link you followed may be broken or the page may have been removed.</p><div className="welcome-actions" style={{justifyContent:'center'}}><button className="primary" onClick={closeOverlay}><Home size={17}/> Go to homepage</button></div></div></section> : <>
         <section className="welcome">
           <div><p className="eyebrow">WELCOME TO NOVA RESORT</p><h1>Good to see you, {name.split(' ')[0]} <span>✦</span></h1><p className="platform-intro">A caring space where members and wellness professionals connect, talk, heal, grow, and support one another. Therapists, healers, and coaches can also host <mark>online sessions and workshops</mark> for the community.</p></div>
           <div className="welcome-actions"><button className="primary" onClick={() => openFeature('people')}><Compass size={17}/> Explore the community</button><button className="secondary-cta" onClick={() => setRoute('members')}><UsersRound size={17}/> Discover Members</button></div>
@@ -522,6 +524,7 @@ function App() {
             <section className="disclaimer"><LockKeyhole size={17}/><p><b>A safe space, not a medical service.</b> Nova Resort offers peer support and wellness connection. If you are in immediate danger, please contact local emergency services.</p></section>
           </aside>
         </div>
+        </>}
       </div>
     </main>
     {menuOpen && <button className="backdrop" aria-label="Close menu" onClick={() => setMenuOpen(false)}/>} 
