@@ -263,7 +263,7 @@ export function HealersDirectory({ userId, onClose, onOpenRoom, onOpenProfile, o
     setLoading(true)
     setError('')
     try {
-      const rows = await searchPublicHealers({
+      const result = await searchPublicHealers({
         query,
         professionalType,
         language,
@@ -274,8 +274,8 @@ export function HealersDirectory({ userId, onClose, onOpenRoom, onOpenProfile, o
         limit: PAGE_SIZE,
         offset: page * PAGE_SIZE,
       })
-      setItems(rows)
-      setTotal(Number(rows[0]?.total_count || 0))
+      setItems(result.rows)
+      setTotal(Number(result.total || 0))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'We could not load healers right now. Please try again.')
       setItems([])

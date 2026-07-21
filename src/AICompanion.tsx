@@ -32,8 +32,7 @@ const hashConversationId = () => {
 }
 const setAiRoute = (id?:string) => {
   const next = id ? `#ai/${id}` : '#ai'
-  if (window.location.hash === next) window.dispatchEvent(new HashChangeEvent('hashchange'))
-  else window.location.hash = next
+  if (window.location.hash !== next) window.location.hash = next
 }
 const tempId = () => `local-${Date.now()}-${Math.random().toString(16).slice(2)}`
 
@@ -45,8 +44,8 @@ function markdown(value:string) {
   const escaped = escapeHtml(value)
   return escaped
     .replace(/^### (.*)$/gm, '<h4>$1</h4>')
-    .replace(/^## (.*)$/gm, '<h4>$1</h4>')
-    .replace(/^# (.*)$/gm, '<h4>$1</h4>')
+    .replace(/^## (.*)$/gm, '<h3>$1</h3>')
+    .replace(/^# (.*)$/gm, '<h2>$1</h2>')
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
     .replace(/`([^`]+)`/g, '<code>$1</code>')

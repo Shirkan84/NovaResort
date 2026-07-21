@@ -197,7 +197,7 @@ create policy "friendships visible to participants" on public.friendships for se
 create policy "users request friendship" on public.friendships for insert to authenticated with check (requester_id=auth.uid());
 create policy "participants update friendships" on public.friendships for update to authenticated using (requester_id=auth.uid() or addressee_id=auth.uid());
 create policy "users view own notifications" on public.notifications for select to authenticated using (user_id=auth.uid());
-create policy "authenticated users create notifications" on public.notifications for insert to authenticated with check (actor_id=auth.uid());
+-- Notification INSERT removed: all creation is via security definer functions only.
 create policy "users update own notifications" on public.notifications for update to authenticated using (user_id=auth.uid());
 create policy "video participants view sessions" on public.video_sessions for select to authenticated using (host_id=auth.uid() or guest_id=auth.uid());
 create policy "users invite video guest" on public.video_sessions for insert to authenticated with check (host_id=auth.uid());

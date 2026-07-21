@@ -51,7 +51,7 @@ export async function searchMembers(filters:MemberFilters = {}) {
     .eq('discoverable',true)
     .neq('visibility','private')
 
-  const q = (filters.query || '').replace(/[,%()]/g, ' ').trim()
+  const q = (filters.query || '').replace(/[,%()]/g, ' ').trim().replace(/%/g,'\\%').replace(/_/g,'\\_')
   if (q) query = query.or(`display_name.ilike.%${q}%,full_name.ilike.%${q}%,professional_title.ilike.%${q}%,about.ilike.%${q}%,country.ilike.%${q}%,city.ilike.%${q}%`)
   if (filters.country && filters.country !== 'all') query = query.eq('country', filters.country)
   if (filters.language && filters.language !== 'all') query = query.contains('languages', [filters.language])
@@ -70,5 +70,5 @@ export async function searchMembers(filters:MemberFilters = {}) {
   const { data, error, count } = await query.range(offset, offset + limit - 1)
   if (error) throw error
   const rows = ((data as PublicMember[]) || [])
-  return { rows, total: count || rows.length }
+  return { rows, total: count ?? rows.length }
 }

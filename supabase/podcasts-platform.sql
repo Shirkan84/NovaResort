@@ -376,7 +376,12 @@ with check (reporter_id = (select auth.uid()));
 
 drop policy if exists "users view own podcast reports" on public.podcast_reports;
 create policy "users view own podcast reports" on public.podcast_reports for select to authenticated
-using (reporter_id = (select auth.uid()));
+using (reporter_id = (select auth.uid()) or public.current_user_is_admin());
+
+drop policy if exists "admins manage podcast reports" on public.podcast_reports;
+create policy "admins manage podcast reports" on public.podcast_reports for all to authenticated
+using (public.current_user_is_admin())
+with check (public.current_user_is_admin());
 
 create or replace function public.search_podcasts(
   search_text text default '',
@@ -416,10 +421,13 @@ stable
 security invoker
 set search_path = public
 as $$
-  with visible as (
+  with sanitized as (
+    select replace(replace(replace(search_text, '%', '\%'), '_', '\_'), E'\\', E'\\\\') as safe_text
+  ), visible as (
     select p.*, pr.display_name, pr.full_name, pr.avatar_url, pr.professional_title, pr.professional_verification_status
     from public.podcasts p
     join public.profiles pr on pr.id = p.creator_id
+    cross join sanitized s
     where public.can_access_podcast(p)
       and (category_filter = 'all' or p.category = category_filter)
       and (language_filter = 'all' or p.language = language_filter)
@@ -431,17 +439,17 @@ as $$
         )
       )
       and (
-        coalesce(nullif(search_text,''),'') = ''
-        or p.title ilike '%' || search_text || '%'
-        or p.short_description ilike '%' || search_text || '%'
-        or p.description ilike '%' || search_text || '%'
-        or p.category ilike '%' || search_text || '%'
-        or p.language ilike '%' || search_text || '%'
-        or coalesce(pr.display_name, pr.full_name) ilike '%' || search_text || '%'
-        or coalesce(pr.professional_title,'') ilike '%' || search_text || '%'
+        s.safe_text = ''
+        or p.title ilike '%' || s.safe_text || '%'
+        or p.short_description ilike '%' || s.safe_text || '%'
+        or p.description ilike '%' || s.safe_text || '%'
+        or p.category ilike '%' || s.safe_text || '%'
+        or p.language ilike '%' || s.safe_text || '%'
+        or coalesce(pr.display_name, pr.full_name) ilike '%' || s.safe_text || '%'
+        or coalesce(pr.professional_title,'') ilike '%' || s.safe_text || '%'
         or exists (
           select 1 from public.podcast_tag_links l join public.podcast_tags t on t.id = l.tag_id
-          where l.podcast_id = p.id and t.name ilike '%' || search_text || '%'
+          where l.podcast_id = p.id and t.name ilike '%' || s.safe_text || '%'
         )
       )
   ), scored as (

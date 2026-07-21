@@ -6,7 +6,7 @@ import './private-messaging.css'
 
 type Profile = { id:string; full_name:string; display_name:string|null; avatar_url:string|null; country:string|null; profile_type:string; about:string; interests:string[]; specialties:string[]; online:boolean }
 type MessageDeliveryStatus = 'sending'|'sent'|'failed'|'read'
-type Message = { id:string; body:string; sender_id:string; created_at:string; edited_at?:string|null; read_at?:string|null; reply_to?:string|null; client_message_id?:string|null; delivery_status?:MessageDeliveryStatus; profiles?:{full_name:string;display_name?:string|null;avatar_url:string|null}|null }
+type Message = { id:string; body:string; sender_id:string; created_at:string; edited_at?:string|null; read_at?:string|null; reply_to?:string|null; client_message_id?:string|null; media_url?:string|null; media_type?:string|null; media_mime_type?:string|null; media_size?:number|null; delivery_status?:MessageDeliveryStatus; profiles?:{full_name:string;display_name?:string|null;avatar_url:string|null}|null }
 type PrivateRoom = DbRoom & { avatar_url:string|null; other_user_id?:string; other_online?:boolean; other_last_seen?:string|null; verified?:boolean; last_message:string|null; last_sender_id?:string|null; last_activity:string; unread_count?:number }
 type ConnectionRequest = { id:string; requester_id:string; addressee_id:string; status:string; profiles?:Profile|null }
 type Reaction = { message_id:string; emoji:string; user_id:string }
@@ -15,7 +15,7 @@ const initials = (name?:string|null) => (name || 'N').split(' ').map(x=>x[0]).jo
 const displayName = (p:Profile) => p.display_name || p.full_name || 'Nova member'
 const spam = (body:string) => (body.match(/https?:\/\//g)||[]).length>2 || /(.)\1{18,}/.test(body) || /(free money|crypto giveaway|click here now|telegram.me|whatsapp group)/i.test(body)
 const announceNotificationsRead = () => window.dispatchEvent(new CustomEvent('nova-notifications-read'))
-const messageSelect = 'id,body,sender_id,created_at,edited_at,read_at,reply_to,client_message_id,profiles!messages_sender_id_fkey(full_name,display_name,avatar_url)'
+const messageSelect = 'id,body,sender_id,created_at,edited_at,read_at,reply_to,client_message_id,media_url,media_type,media_mime_type,media_size,profiles!messages_sender_id_fkey(full_name,display_name,avatar_url)'
 const reactionEmojis = ['❤️','👍','🤗','🙏','😊','😂','🌿','✨']
 const emojiGroups = [
   ['Recent','❤️','🙏','😊','🌿','✨','🤗','👍','😂'],
@@ -243,6 +243,66 @@ export function PrivateChatRoom({room,userId,onClose,onOpenProfile}:{room:DbRoom
     await persistMessage(optimistic)
   }
 
+  async function uploadMedia(file:File, mediaType:'image'|'audio'|'video', caption:string){
+    const path=`${userId}/${room.id}/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g,'-')}`
+    const {error:uploadErr}=await supabase.storage.from('chat-media').upload(path,file,{contentType:file.type,upsert:false})
+    if(uploadErr){setError(uploadErr.message);return}
+    const {data:urlData}=supabase.storage.from('chat-media').getPublicUrl(path)
+    const mediaUrl=urlData?.publicUrl
+    if(!mediaUrl){setError('Could not get media URL.');return}
+    const clientId=crypto.randomUUID()
+    const optimistic={id:`local-${clientId}`,body:caption||`Shared ${mediaType}`,sender_id:userId,created_at:new Date().toISOString(),client_message_id:clientId,media_url:mediaUrl,media_type:mediaType,media_mime_type:file.type,media_size:file.size,delivery_status:'sending' as MessageDeliveryStatus,profiles:{full_name:'You',display_name:'You',avatar_url:null}} as Message
+    setMessages(items=>mergeMessage(items,optimistic))
+    const {data,error}=await supabase.from('messages')
+      .insert({room_id:room.id,sender_id:userId,body:caption||`Shared ${mediaType}`,client_message_id:clientId,media_url:mediaUrl,media_type:mediaType,media_mime_type:file.type,media_size:file.size})
+      .select(messageSelect).single()
+    if(error){setError(error.message);setMessages(items=>items.map(item=>item.id===optimistic.id?{...item,delivery_status:'failed'}:item))}
+    else{setMessages(items=>mergeMessage(items,{...(data as unknown as Message),delivery_status:'sent'}))}
+  }
+
+  function handleImageUpload(){
+    const input=document.createElement('input')
+    input.type='file'
+    input.accept='image/jpeg,image/png,image/gif,image/webp'
+    input.onchange=async()=>{
+      const file=input.files?.[0]
+      if(!file)return
+      await uploadMedia(file,'image','')
+    }
+    input.click()
+  }
+
+  async function startCall(videoCall:boolean){
+    if(!privateRoom.other_user_id)return
+    const roomId=`nova-dm-${[userId,privateRoom.other_user_id].sort().join('-')}`
+    window.open(`https://meet.jit.si/${roomId}`,'_blank','noopener,noreferrer')
+    setNotice(videoCall?'Opening video call in a new tab...':'Opening audio call in a new tab...')
+  }
+
+  function startRecording(isVideo:boolean){
+    if(!navigator.mediaDevices?.getUserMedia){setError('Recording is not supported in this browser.');return}
+    const constraints={audio:true,...(isVideo?{video:{width:640,height:480}}:{})}
+    navigator.mediaDevices.getUserMedia(constraints).then(stream=>{
+      const recorder=new MediaRecorder(stream,{mimeType:isVideo?'video/webm':'audio/webm'})
+      const chunks:BlobPart[]=[]
+      recorder.ondataavailable=e=>{if(e.data.size>0)chunks.push(e.data)}
+      recorder.onstop=async()=>{
+        stream.getTracks().forEach(t=>t.stop())
+        const blob=new Blob(chunks,{type:isVideo?'video/webm':'audio/webm'})
+        const ext=isVideo?'webm':'webm'
+        const file=new File([blob],`${isVideo?'video':'audio'}-${Date.now()}.${ext}`,{type:blob.type})
+        await uploadMedia(file,isVideo?'video':'audio',isVideo?'Sent a video message':'Sent a voice message')
+      }
+      recorder.start()
+      setNotice(isVideo?'Recording video... Click the mic button to stop.':'Recording audio... Click the mic button to stop.')
+      const stopRecording=()=>{
+        if(recorder.state==='recording')recorder.stop()
+        setNotice('')
+      }
+      window.__novaStopRecording=stopRecording
+    }).catch(()=>setError('Could not access microphone or camera.'))
+  }
+
   async function react(message:Message,emoji:string){
     if(message.id.startsWith('local-'))return
     const exists=reactions.some(item=>item.message_id===message.id&&item.user_id===userId&&item.emoji===emoji)
@@ -333,6 +393,9 @@ export function PrivateChatRoom({room,userId,onClose,onOpenProfile}:{room:DbRoom
           <div>
             {reply&&<em>Replying to {reply.sender_id===userId?'you':reply.profiles?.full_name||'member'}: {reply.body.slice(0,80)}</em>}
               <b>{m.sender_id===userId?'You':m.profiles?.full_name||'Member'} <small>{new Date(m.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}{m.edited_at?' - edited':''}{m.sender_id===userId?(m.delivery_status==='failed'?' - failed':m.delivery_status==='sending'?' - sending':m.read_at?' - read':' - sent'):''}</small></b>
+            {m.media_url && m.media_type==='image' && <div className="media-preview"><img src={m.media_url} alt={m.body||'Shared image'} loading="lazy" onClick={()=>window.open(m.media_url!,'_blank')}/></div>}
+            {m.media_url && m.media_type==='audio' && <div className="media-preview"><audio controls preload="metadata" src={m.media_url}/></div>}
+            {m.media_url && m.media_type==='video' && <div className="media-preview"><video controls preload="metadata" src={m.media_url} style={{maxWidth:'100%',maxHeight:300,borderRadius:8}}/></div>}
             <p>{m.body}</p>
             {!m.id.startsWith('local-')&&<div className="private-reactions">{reactionEmojis.map(emoji=>{const state=reactionState(m.id,emoji);return <button key={emoji} className={state.me?'active':''} onClick={()=>react(m,emoji)}>{emoji}{state.count>0&&<span>{state.count}</span>}</button>})}</div>}
             <nav>{m.delivery_status==='failed'?<><button onClick={()=>retry(m)}>Retry</button><button onClick={()=>deleteDraft(m)}>Delete draft</button></>:<><button onClick={()=>setReplyTo(m)}>Reply</button><button onClick={()=>navigator.clipboard?.writeText(m.body)}><Copy size={12}/> Copy</button>{m.sender_id!==userId&&!m.id.startsWith('local-')&&<button onClick={()=>reportMessage(m)}><Flag size={12}/> Report</button>}{m.sender_id===userId&&!m.id.startsWith('local-')&&<button onClick={()=>{setEditing(m);setEditText(m.body)}}>Edit</button>}{m.sender_id===userId&&!m.id.startsWith('local-')&&<button onClick={()=>remove(m)}>Delete</button>}</>}</nav>
@@ -343,7 +406,7 @@ export function PrivateChatRoom({room,userId,onClose,onOpenProfile}:{room:DbRoom
   }
 
   return <div className="feature-overlay"><section className="chat-window private-chat-window messenger-window">
-    <header className="messenger-header"><button onClick={onClose} aria-label="Back"><ChevronLeft/></button><button className="messenger-profile" onClick={()=>privateRoom.other_user_id&&onOpenProfile?.(privateRoom.other_user_id)}><span>{privateRoom.avatar_url?<img src={privateRoom.avatar_url} alt=""/>:initials(profileName)}<i className={presenceText.startsWith('Online')?'online':''}/></span><div><h2>{profileName}{privateRoom.verified&&<BadgeCheck size={14}/>}</h2><small>{presenceText}</small></div></button><div className="messenger-tools"><button disabled title="Live audio calls require secure provider setup"><Phone/></button><button disabled title="Live video calls require secure provider setup"><Video/></button><button onClick={()=>privateRoom.other_user_id&&onOpenProfile?.(privateRoom.other_user_id)} title="View profile"><UserCircle/></button><button onClick={()=>setSearchOpen(value=>!value)} title="Search messages"><Search/></button><button onClick={()=>{setMuted(value=>!value);setNotice(!muted?'Conversation muted on this device.':'Conversation unmuted.')}} title="Mute notifications"><BellOff/></button><button onClick={blockUser} title="Block"><Ban/></button><button onClick={reportUser} title="Report"><Flag/></button><button onClick={onClose} aria-label="Close"><X/></button></div></header>
+    <header className="messenger-header"><button onClick={onClose} aria-label="Back"><ChevronLeft/></button><button className="messenger-profile" onClick={()=>privateRoom.other_user_id&&onOpenProfile?.(privateRoom.other_user_id)}><span>{privateRoom.avatar_url?<img src={privateRoom.avatar_url} alt=""/>:initials(profileName)}<i className={presenceText.startsWith('Online')?'online':''}/></span><div><h2>{profileName}{privateRoom.verified&&<BadgeCheck size={14}/>}</h2><small>{presenceText}</small></div></button><div className="messenger-tools"><button onClick={()=>startCall(false)} title="Start audio call"><Phone/></button><button onClick={()=>startCall(true)} title="Start video call"><Video/></button><button onClick={()=>privateRoom.other_user_id&&onOpenProfile?.(privateRoom.other_user_id)} title="View profile"><UserCircle/></button><button onClick={()=>setSearchOpen(value=>!value)} title="Search messages"><Search/></button><button onClick={()=>{setMuted(value=>!value);setNotice(!muted?'Conversation muted on this device.':'Conversation unmuted.')}} title="Mute notifications"><BellOff/></button><button onClick={blockUser} title="Block"><Ban/></button><button onClick={reportUser} title="Report"><Flag/></button><button onClick={onClose} aria-label="Close"><X/></button></div></header>
     {searchOpen&&<label className="messenger-search"><Search size={15}/><input value={searchText} onChange={e=>setSearchText(e.target.value)} placeholder="Search this conversation"/></label>}
     <div className="safety-strip messenger-safety"><button onClick={()=>alert('Community guidelines: be respectful, protect privacy, no harassment, no spam, and report harmful behavior.')}>Community Guidelines</button><button onClick={()=>setNotice('Conversation information: private room, two participants, messages save even when the other person is offline.')}><Info size={12}/> Info</button><span>{muted?'Muted on this device.':'Only you and the other selected member can open this room.'}</span></div>
     <div className="private-message-list" ref={listRef} onScroll={()=>{if(nearBottom()){setUnread(0);markRead()}}}>
@@ -357,7 +420,7 @@ export function PrivateChatRoom({room,userId,onClose,onOpenProfile}:{room:DbRoom
     {emojiOpen&&<div className="messenger-picker emoji-picker">{emojiGroups.map(group=><section key={group[0]}><b>{group[0]}</b><div>{group.slice(1).map(emoji=><button key={`${group[0]}-${emoji}`} onClick={()=>insertEmoji(emoji)}>{emoji}</button>)}</div></section>)}</div>}
     {gestureOpen&&<div className="messenger-picker gesture-picker">{gestures.map(([emoji,label])=><button key={label} onClick={()=>sendGesture(emoji,label)}><span>{emoji}</span>{label}</button>)}</div>}
     <form className="message-compose messenger-compose" onSubmit={send}>
-      <div className="composer-tools"><button type="button" onClick={()=>{setEmojiOpen(value=>!value);setGestureOpen(false)}} aria-label="Emoji picker"><Smile/></button><button type="button" onClick={()=>{setGestureOpen(value=>!value);setEmojiOpen(false)}} aria-label="Gesture picker"><Sparkles/></button><button type="button" disabled title="GIF search needs a configured provider"><MessageCircleMore/></button><button type="button" disabled title="Private image storage is not configured yet"><Image/></button><button type="button" disabled title="Attachment storage is not configured yet"><Paperclip/></button><button type="button" disabled title="Audio recording needs private media storage"><Mic/></button><button type="button" disabled title="Video recording needs private media storage"><Video/></button><button type="button" disabled title="Games begin after messaging reliability is confirmed"><Gamepad2/></button></div>
+      <div className="composer-tools"><button type="button" onClick={()=>{setEmojiOpen(value=>!value);setGestureOpen(false)}} aria-label="Emoji picker"><Smile/></button><button type="button" onClick={()=>{setGestureOpen(value=>!value);setEmojiOpen(false)}} aria-label="Gesture picker"><Sparkles/></button><button type="button" disabled title="GIF search needs a configured provider"><MessageCircleMore/></button><button type="button" onClick={handleImageUpload} title="Share an image"><Image/></button><button type="button" disabled title="File attachments coming soon"><Paperclip/></button><button type="button" onClick={()=>startRecording(false)} title="Record a voice message"><Mic/></button><button type="button" onClick={()=>startRecording(true)} title="Record a video message"><Video/></button><button type="button" disabled title="Games coming soon"><Gamepad2/></button></div>
       <textarea value={text} onChange={e=>updateText(e.target.value)} onKeyDown={composerKeyDown} maxLength={4000} placeholder="Write a private message..." rows={1}/>
       <button aria-label="Send"><Send/></button>
     </form>

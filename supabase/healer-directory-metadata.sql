@@ -70,9 +70,13 @@ stable
 security invoker
 set search_path = public
 as $$
-  with filtered as (
+  with sanitized as (
+    select replace(replace(replace(search_text, '%', '\%'), '_', '\_'), E'\\', E'\\\\') as safe_text,
+           replace(replace(replace(availability_filter, '%', '\%'), '_', '\_'), E'\\', E'\\\\') as safe_availability
+  ), filtered as (
     select p.*
     from public.profiles p
+    cross join sanitized s
     where p.account_status = 'active'
       and p.discoverable = true
       and p.visibility <> 'private'
@@ -87,15 +91,15 @@ as $$
       and (country_filter = 'all' or p.country = country_filter)
       and (online_only = false or p.online = true)
       and (verified_only = false or p.professional_verification_status = 'approved')
-      and (availability_filter = 'all' or coalesce(p.availability,'') ilike '%' || availability_filter || '%')
+      and (availability_filter = 'all' or coalesce(p.availability,'') ilike '%' || s.safe_availability || '%')
       and (
-        coalesce(nullif(search_text,''),'') = ''
-        or coalesce(p.display_name,'') ilike '%' || search_text || '%'
-        or coalesce(p.full_name,'') ilike '%' || search_text || '%'
-        or coalesce(p.professional_title,'') ilike '%' || search_text || '%'
-        or coalesce(p.about,'') ilike '%' || search_text || '%'
-        or exists (select 1 from unnest(coalesce(p.specialties,'{}'::text[])) s where s ilike '%' || search_text || '%')
-        or exists (select 1 from unnest(coalesce(p.languages,'{}'::text[])) l where l ilike '%' || search_text || '%')
+        s.safe_text = ''
+        or coalesce(p.display_name,'') ilike '%' || s.safe_text || '%'
+        or coalesce(p.full_name,'') ilike '%' || s.safe_text || '%'
+        or coalesce(p.professional_title,'') ilike '%' || s.safe_text || '%'
+        or coalesce(p.about,'') ilike '%' || s.safe_text || '%'
+        or exists (select 1 from unnest(coalesce(p.specialties,'{}'::text[])) sp where sp ilike '%' || s.safe_text || '%')
+        or exists (select 1 from unnest(coalesce(p.languages,'{}'::text[])) l where l ilike '%' || s.safe_text || '%')
       )
   ), counted as (
     select filtered.*, count(*) over() as total_count

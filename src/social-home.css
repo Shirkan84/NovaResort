@@ -6,7 +6,7 @@
 }
 
 .quick-actions button {
-  height:38px;
+  height:44px;
   border:1px solid var(--line);
   border-radius:11px;
   background:var(--card);
@@ -15,10 +15,67 @@
   display:flex;
   align-items:center;
   gap:7px;
-  font-size:10px;
+  font-size:11px;
   font-weight:700;
   box-shadow:0 7px 22px #35473d08;
   transition:transform .2s ease, box-shadow .2s ease, background .2s ease;
+}
+
+.quick-actions button.healer-action {
+  background:linear-gradient(135deg,#eef4ed,#e8f0e9);
+  border-color:#c2d8c8;
+  color:#3d6150;
+}
+
+.quick-actions button.healer-action:hover {
+  background:linear-gradient(135deg,#e2ede4,#d8e8dc);
+  box-shadow:0 12px 28px #35473d16;
+}
+
+.dark .quick-actions button.healer-action {
+  background:linear-gradient(135deg,#1f2e25,#243529);
+  border-color:#3a5142;
+  color:#93c4a5;
+}
+
+.dark .quick-actions button.healer-action:hover {
+  background:linear-gradient(135deg,#253829,#2c4030);
+}
+
+.healer-create-action {
+  background:#eef4ed!important;
+  border:1px solid #c2d8c8!important;
+  color:#3d6150!important;
+  font-weight:700;
+}
+
+.healer-create-action:hover {
+  background:#dce8df!important;
+}
+
+.dark .healer-create-action {
+  background:#1f2e25!important;
+  border-color:#3a5142!important;
+  color:#93c4a5!important;
+}
+
+.healer-only-badge {
+  font-size:10px;
+  font-weight:700;
+  color:var(--muted);
+  background:var(--page);
+  border:1px dashed var(--line);
+  border-radius:10px;
+  padding:8px 14px;
+  display:flex;
+  align-items:center;
+  gap:5px;
+  height:44px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quick-actions button { transition:none; }
+  .quick-actions button:hover { transform:none; }
 }
 
 .quick-actions button:hover {

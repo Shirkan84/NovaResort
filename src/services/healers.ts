@@ -36,7 +36,9 @@ export async function searchPublicHealers(filters:HealerSearchFilters = {}) {
     page_offset: filters.offset || 0,
   })
   if (error) throw error
-  return ((data as PublicHealer[]) || [])
+  const rows = (data as PublicHealer[]) || []
+  const total = rows.length > 0 ? rows[0].total_count : 0
+  return { rows, total }
 }
 
 export async function getFeaturedHealers(limit = 12) {

@@ -21,18 +21,20 @@ const ROUTE_TO_BUTTON: Record<string, string> = {
   terms: 'Visit safety center',
 }
 
+const BASE_PATH = import.meta.env.VITE_BASE_PATH || '/NovaResort'
+
 function getRoute() {
   const fromHash = window.location.hash.replace(/^#\/?/, '')
   if (fromHash) return decodeURIComponent(fromHash)
   const pathRoute = window.location.pathname
-    .replace(/^\/NovaResort\/?/, '')
+    .replace(new RegExp('^' + BASE_PATH.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '/?'), '')
     .replace(/^\/+|\/+$/g, '')
   return decodeURIComponent(pathRoute || 'home')
 }
 
 function normalizePathRoute(route: string) {
   if (window.location.hash || route === 'home') return
-  window.history.replaceState(null, '', `/NovaResort/#/${route}`)
+  window.history.replaceState(null, '', `${BASE_PATH}/#/${route}`)
 }
 
 function clickMatchingButton(label: string) {

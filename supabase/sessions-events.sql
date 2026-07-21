@@ -123,6 +123,9 @@ begin
     raise exception 'Registration is closed.';
   end if;
 
+  -- Advisory lock prevents concurrent registrations from exceeding capacity
+  perform pg_advisory_xact_lock(hashtext('session_reg:' || target_session::text));
+
   select count(*) into active_count
   from public.session_registrations
   where session_id = target_session and status = 'registered';

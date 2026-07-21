@@ -10,16 +10,16 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.6",
-    "@vitejs/plugin-react": "latest",
+    "@vitejs/plugin-react": "^4.5.2",
     "lucide-react": "^0.468.0",
-    "react": "latest",
-    "react-dom": "latest",
-    "typescript": "latest",
-    "vite": "latest",
-    "vite-plugin-singlefile": "latest"
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vite-plugin-singlefile": "^2.0.3"
   },
   "devDependencies": {
-    "@types/react": "latest",
-    "@types/react-dom": "latest"
+    "@types/react": "^19.1.6",
+    "@types/react-dom": "^19.1.6"
   }
 }

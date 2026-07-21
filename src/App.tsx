@@ -1,8 +1,8 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import {
   Bell, CalendarDays, ChevronDown, ChevronRight, CircleUserRound, Clock3,
   Bot, Compass, Heart, Home, Leaf, LockKeyhole, Menu, MessageCircleMore, MoreHorizontal,
-  Search, Send, Settings, ShieldCheck, Sparkles, UsersRound, Video, X, Moon, Sun, Languages, UserPlus, Headphones
+  Search, Send, Settings, ShieldCheck, Sparkles, UsersRound, Video, X, Moon, Sun, Languages, UserPlus, Headphones, Mic
 } from 'lucide-react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
@@ -26,9 +26,12 @@ type NextSession = { id:string; title:string; starts_at:string; host_id:string }
 type Feature = 'discover'|'people'|'healers'|'profile'|'notifications'|'messages'|'safety'|'connections'|'sessions'|'ai'|'podcasts'
 type AppRoute = { feature: Feature | null; roomId: string | null; profileId: string | null; podcastId: string | null; episodeId: string | null; podcastStudio: boolean }
 
+const BASE_URL = import.meta.env.VITE_BASE_URL || 'https://shirkan84.github.io/NovaResort/'
+const BASE_PATH = import.meta.env.VITE_BASE_PATH || '/NovaResort'
+
 function routeFromHash(): AppRoute {
   const pathRoute = window.location.pathname
-    .replace(/^\/NovaResort\/?/, '')
+    .replace(new RegExp('^' + BASE_PATH.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '/?'), '')
     .replace(/^\/+|\/+$/g, '')
   const value = decodeURIComponent(window.location.hash.replace(/^#\/?/, '') || pathRoute || 'home')
   const base = { feature: null, roomId: null, profileId: null, podcastId: null, episodeId: null, podcastStudio: false }
@@ -56,8 +59,7 @@ function routeFromHash(): AppRoute {
 function setRoute(path: string) {
   const normalized = path.startsWith('/') ? path : `/${path}`
   const next = `#${normalized}`
-  if (window.location.hash === next) window.dispatchEvent(new HashChangeEvent('hashchange'))
-  else window.location.hash = next
+  if (window.location.hash !== next) window.location.hash = next
 }
 
 function navFromFeature(feature: Feature | null) {
@@ -69,6 +71,9 @@ function navFromFeature(feature: Feature | null) {
   if (feature === 'connections') return 'Connections'
   if (feature === 'sessions') return 'Sessions'
   if (feature === 'podcasts') return 'Podcasts'
+  if (feature === 'notifications') return 'Home'
+  if (feature === 'safety') return 'Home'
+  if (feature === 'profile') return 'Settings'
   return 'Home'
 }
 
@@ -151,7 +156,7 @@ function AuthScreen() {
           session_types: data.getAll('sessionTypes').map(String)
         } : null
         const { data:authData, error } = await supabase.auth.signUp({ email, password, options: {
-          emailRedirectTo: 'https://shirkan84.github.io/NovaResort/',
+          emailRedirectTo: BASE_URL,
           data: { full_name: fullName, profile_type: 'member', requested_profile_type: requestedType, country: data.get('country'), healer_application: healerApplication }
         }})
         if (error) throw error
@@ -165,7 +170,7 @@ function AuthScreen() {
         }
         setMessage(requestedType === 'healer' ? 'Your account was created as a Regular Member and your healer application is pending administrator review. Please check your email to verify your account.' : 'Welcome to Nova Resort. Please check your email to verify your account.')
       } else if (mode === 'reset') {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: 'https://shirkan84.github.io/NovaResort/' })
+        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: BASE_URL })
         if (error) throw error
         setMessage('Password reset instructions have been sent to your email.')
       } else {
@@ -195,12 +200,31 @@ function AuthScreen() {
   </div>
 }
 
+function ProfilePreviewActions({profile,friendships,userId,onConnect,onMessage,onSessions,onCreatePodcast,onCreateSession}:{profile:LiveProfile;friendships:Friendship[];userId:string;onConnect:(p:LiveProfile)=>void;onMessage:(p:LiveProfile)=>void;onSessions:()=>void;onCreatePodcast?:()=>void;onCreateSession?:()=>void}) {
+  const rel = relationshipFor(profile.id, friendships)
+  const label = rel?.status==='accepted' ? 'Connected' : rel?.status==='pending' && rel.requester_id===userId ? 'Request sent' : rel?.status==='pending' ? 'Accept request' : 'Connect'
+  const isOwn = profile.id === userId
+  return <div className="healer-actions">
+    {!isOwn && <button onClick={()=>onConnect(profile)} disabled={rel?.status==='accepted'}><UserPlus size={13}/> {label}</button>}
+    {!isOwn && <button onClick={()=>onMessage(profile)}><MessageCircleMore size={13}/> Message</button>}
+    {approvedProfessional(profile) && !isOwn && <button onClick={onSessions}>View sessions</button>}
+    {isOwn && approvedProfessional(profile) && <>
+      <button className="healer-create-action" onClick={onCreatePodcast}><Mic size={13}/> Create podcast</button>
+      <button className="healer-create-action" onClick={onCreateSession}><CalendarDays size={13}/> Create session</button>
+    </>}
+  </div>
+}
+
 function App() {
   const language = getLanguage()
   const [session, setSession] = useState<Session | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [dark, setDark] = useState(false)
+  const [dark, setDark] = useState(() => {
+    const saved = localStorage.getItem('nova-dark-mode')
+    if (saved !== null) return saved === 'true'
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
   const [notice, setNotice] = useState('')
   const [activeNav, setActiveNav] = useState('Home')
   const [dbRooms, setDbRooms] = useState<DbRoom[]>([])
@@ -218,6 +242,7 @@ function App() {
   const [podcastPlayer,setPodcastPlayer] = useState<PlayerEpisode|null>(null)
   const [signingOut,setSigningOut] = useState(false)
   const [metrics,setMetrics] = useState({members:0,online:0,healers:0,rooms:0,sessions:0,notifications:0,connections:0})
+  const [isHealer,setIsHealer] = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setAuthLoading(false) })
@@ -231,6 +256,8 @@ function App() {
     return () => window.removeEventListener('hashchange', syncRoute)
   }, [])
   useEffect(() => applyLanguage(language), [language])
+  useEffect(() => { localStorage.setItem('nova-dark-mode', String(dark)) }, [dark])
+  useEffect(() => { return () => { if (noticeTimer.current) window.clearTimeout(noticeTimer.current) } }, [])
   useEffect(() => {
     if (!session) return
     let cancelled = false
@@ -291,27 +318,35 @@ function App() {
   useEffect(() => {
     if (!session) return
     const loadLiveData=async()=>{
-      const fiveMinutesAgo=new Date(Date.now()-5*60*1000).toISOString()
-      setHealersLoading(true)
-      const [rooms,allMembers,online,healerCount,featuredHealersResult,activeRooms,sessions,notifications,connections,activity,me,relations]=await Promise.all([
-        supabase.from('rooms').select('id,name,description,icon,theme,is_private').eq('is_private',false).limit(6),
-        supabase.from('profiles').select('id',{count:'exact',head:true}),
-        supabase.from('profiles').select('id',{count:'exact',head:true}).gte('last_seen',fiveMinutesAgo),
-        supabase.from('profiles').select('id',{count:'exact',head:true}).in('profile_type',healerRoles).eq('professional_verification_status','approved').neq('visibility','private').eq('account_status','active').eq('discoverable',true),
-        getFeaturedHealers(12).then(data=>({data,error:null as Error|null})).catch(error=>({data:[],error:error as Error})),
-        supabase.from('rooms').select('id',{count:'exact',head:true}).eq('is_private',false),
-        supabase.from('sessions').select('id',{count:'exact',head:true}).gte('starts_at',new Date().toISOString()).in('status',['published','live','registration_closed']),
-        supabase.from('notifications').select('id',{count:'exact',head:true}).eq('user_id',session.user.id).is('read_at',null),
-        supabase.from('friendships').select('id',{count:'exact',head:true}).eq('addressee_id',session.user.id).eq('status','pending'),
-        supabase.from('messages').select('id,body,created_at,profiles!messages_sender_id_fkey(full_name,avatar_url),rooms!messages_room_id_fkey(id,name)').order('created_at',{ascending:false}).limit(3),
-        supabase.from('profiles').select('avatar_url').eq('id',session.user.id).single(),
-        supabase.from('friendships').select('id,requester_id,addressee_id,status').or(`requester_id.eq.${session.user.id},addressee_id.eq.${session.user.id}`).in('status',['pending','accepted'])
-      ])
-      const healerRows = featuredHealersResult.data.map(profile => ({...profile,interests:null,visibility:'community',next_session:profile.next_session_id?{id:profile.next_session_id,title:profile.next_session_title||'Upcoming session',starts_at:profile.next_session_starts_at||new Date().toISOString(),host_id:profile.id}:null}))
-      setDbRooms((rooms.data as DbRoom[])||[]);setLiveHealers(healerRows);setHealersError(featuredHealersResult.error?'We could not load healers right now. Please try again.':'');setHealersLoading(false);setRecentMessages((activity.data as unknown as RecentMessage[])||[]);setFriendships((relations.data as Friendship[])||[]);setCurrentAvatar(me.data?.avatar_url||null)
-      setMetrics({members:allMembers.count||0,online:online.count||0,healers:healerCount.count||0,rooms:activeRooms.count||0,sessions:sessions.count||0,notifications:notifications.count||0,connections:connections.count||0})
+      try {
+        const fiveMinutesAgo=new Date(Date.now()-5*60*1000).toISOString()
+        setHealersLoading(true)
+        const [rooms,allMembers,online,healerCount,featuredHealersResult,activeRooms,sessions,notifications,connections,activity,me,relations,myProfile]=await Promise.all([
+          supabase.from('rooms').select('id,name,description,icon,theme,is_private').eq('is_private',false).limit(6),
+          supabase.from('profiles').select('id',{count:'exact',head:true}),
+          supabase.from('profiles').select('id',{count:'exact',head:true}).gte('last_seen',fiveMinutesAgo),
+          supabase.from('profiles').select('id',{count:'exact',head:true}).in('profile_type',healerRoles).eq('professional_verification_status','approved').neq('visibility','private').eq('account_status','active').eq('discoverable',true),
+          getFeaturedHealers(12).then(result=>({data:result,error:null as Error|null})).catch(error=>({data:{rows:[] as LiveProfile[],total:0},error:error as Error})),
+          supabase.from('rooms').select('id',{count:'exact',head:true}).eq('is_private',false),
+          supabase.from('sessions').select('id',{count:'exact',head:true}).gte('starts_at',new Date().toISOString()).in('status',['published','live','registration_closed']),
+          supabase.from('notifications').select('id',{count:'exact',head:true}).eq('user_id',session.user.id).is('read_at',null),
+          supabase.from('friendships').select('id',{count:'exact',head:true}).eq('addressee_id',session.user.id).eq('status','pending'),
+          supabase.from('messages').select('id,body,created_at,profiles!messages_sender_id_fkey(full_name,avatar_url),rooms!messages_room_id_fkey(id,name)').order('created_at',{ascending:false}).limit(3),
+          supabase.from('profiles').select('avatar_url').eq('id',session.user.id).single(),
+          supabase.from('friendships').select('id,requester_id,addressee_id,status').or(`requester_id.eq.${session.user.id},addressee_id.eq.${session.user.id}`).in('status',['pending','accepted']),
+          supabase.from('profiles').select('profile_type,professional_verification_status').eq('id',session.user.id).single()
+        ])
+        const healerRows = (featuredHealersResult.data.rows||[]).map(profile => ({...profile,interests:null,visibility:'community',next_session:(profile as any).next_session_id?{id:(profile as any).next_session_id,title:(profile as any).next_session_title||'Upcoming session',starts_at:(profile as any).next_session_starts_at||new Date().toISOString(),host_id:profile.id}:null}))
+        setDbRooms((rooms.data as DbRoom[])||[]);setLiveHealers(healerRows);setHealersError(featuredHealersResult.error?'We could not load healers right now. Please try again.':'');setHealersLoading(false);setRecentMessages((activity.data as unknown as RecentMessage[])||[]);setFriendships((relations.data as Friendship[])||[]);setCurrentAvatar(me.data?.avatar_url||null)
+        setMetrics({members:allMembers.count||0,online:online.count||0,healers:healerCount.count||0,rooms:activeRooms.count||0,sessions:sessions.count||0,notifications:notifications.count||0,connections:connections.count||0})
+        const myProf=myProfile.data as {profile_type:string;professional_verification_status:string}|null
+        setIsHealer(Boolean(myProf && (healerRoles as string[]).includes(myProf.profile_type) && myProf.professional_verification_status === 'approved'))
+      } catch {
+        setHealersError('Unable to load data. Please refresh the page.')
+        setHealersLoading(false)
+      }
     }
-    const heartbeat=()=>supabase.from('profiles').update({online:true,last_seen:new Date().toISOString()}).eq('id',session.user.id)
+    const heartbeat=()=>{supabase.from('profiles').update({online:true,last_seen:new Date().toISOString()}).eq('id',session.user.id).then(()=>{},()=>{})}
     const refreshNotifications=()=>loadLiveData()
     heartbeat();loadLiveData();const timer=window.setInterval(()=>{heartbeat();loadLiveData()},60000)
     const notices=supabase.channel(`app-notifications-${session.user.id}`)
@@ -321,7 +356,12 @@ function App() {
     return()=>{window.clearInterval(timer);window.removeEventListener('nova-notifications-read',refreshNotifications);supabase.removeChannel(notices);supabase.from('profiles').update({online:false,last_seen:new Date().toISOString()}).eq('id',session.user.id)}
   }, [session])
 
-  const act = (text: string) => { setNotice(text); window.setTimeout(() => setNotice(''), 2800) }
+  const noticeTimer = useRef<number | null>(null)
+  const act = useCallback((text: string) => {
+    if (noticeTimer.current) window.clearTimeout(noticeTimer.current)
+    setNotice(text)
+    noticeTimer.current = window.setTimeout(() => { setNotice(''); noticeTimer.current = null }, 2800)
+  }, [])
   const openFeature = (next: Feature | null) => setRoute(next === 'people' ? 'community' : next || 'home')
   const openRoom = (room: DbRoom) => { setSelectedRoom(room); setFeature(null); setRoute(`room/${room.id}`) }
   const closeOverlay = () => setRoute('home')
@@ -335,6 +375,10 @@ function App() {
       setSelectedRoom(null);setFeature(null);setProfilePreview(null);setPodcastPlayer(null)
       setDbRooms([]);setLiveHealers([]);setRecentMessages([]);setFriendships([]);setCurrentAvatar(null)
       setMetrics({members:0,online:0,healers:0,rooms:0,sessions:0,notifications:0,connections:0})
+      setIsHealer(false)
+      setMenuOpen(false);setShowAllRooms(false);setHealersError('');setActiveNav('Home')
+      if (noticeTimer.current) { window.clearTimeout(noticeTimer.current); noticeTimer.current = null }
+      setNotice('')
       await supabase.removeAllChannels()
       const { error } = await supabase.auth.signOut()
       if (error) throw error
@@ -344,7 +388,7 @@ function App() {
       setSigningOut(false)
     }
   }
-  async function startPrivateMessage(person:LiveProfile){const {data,error}=await supabase.rpc('create_private_room',{other_user:person.id});if(error){act(error.message);return}openRoom({id:data,name:profileName(person),description:'Private two-person conversation',icon:'♢',theme:'sage',is_private:true})}
+  async function startPrivateMessage(person:LiveProfile){const {data,error}=await supabase.rpc('create_private_room',{other_user:person.id});if(error){act(error.message);return}if(!data){act('Could not create conversation.');return}openRoom({id:data,name:profileName(person),description:'Private two-person conversation',icon:'♢',theme:'sage',is_private:true})}
   async function connectWith(person:LiveProfile){
     if (!session) return
     const row = relationshipFor(person.id, friendships)
@@ -398,7 +442,7 @@ function App() {
         <div className="header-actions">
           <button className="language-toggle" onClick={()=>switchLanguage(language==='en'?'he':'en')}><Languages size={17}/>{language==='en'?'עברית':'English'}</button>
           <button className="icon-btn" aria-label="Toggle theme" onClick={() => setDark(!dark)}>{dark ? <Sun size={19}/> : <Moon size={19}/>}</button>
-          <button className="icon-btn notification" aria-label="Notifications" onClick={() => openFeature(metrics.connections>0?'messages':'notifications')}><Bell size={20}/>{metrics.notifications>0&&<i>{metrics.notifications}</i>}</button>
+          <button className="icon-btn notification" aria-label="Notifications" onClick={() => openFeature('notifications')}><Bell size={20}/>{metrics.notifications>0&&<i>{metrics.notifications}</i>}</button>
           <button className="user-chip" onClick={()=>openFeature('profile')}><div className="avatar user">{currentAvatar?<img src={currentAvatar} alt=""/>:initials}</div><ChevronDown size={15}/></button>
           <button className="header-signout" disabled={signingOut} onClick={signOut}>{signingOut?'Signing out...':'Sign out'}</button>
         </div>
@@ -421,9 +465,13 @@ function App() {
           <button onClick={() => openFeature('discover')}><UsersRound size={16}/> Find people</button>
           <button onClick={openHealers}><Sun size={16}/> Find a healer</button>
           <button onClick={() => openFeature('podcasts')}><Headphones size={16}/> Podcasts</button>
-          <button onClick={() => openFeature('sessions')}><CalendarDays size={16}/> Create session</button>
+          <button onClick={() => openFeature('sessions')}><CalendarDays size={16}/> Sessions</button>
           <button onClick={() => openFeature('ai')}><Bot size={16}/> AI Companion</button>
           <button onClick={() => openFeature('messages')}><MessageCircleMore size={16}/> Private rooms</button>
+          {isHealer && <>
+            <button className="healer-action" onClick={() => openPodcast('manage')}><Mic size={16}/> Podcast Studio</button>
+            <button className="healer-action" onClick={() => openFeature('sessions')}><Video size={16}/> Host a session</button>
+          </>}
         </div>
 
         <div className="layout">
@@ -486,10 +534,10 @@ function App() {
     {feature==='ai' && <AICompanion userId={session.user.id} onClose={closeOverlay}/>} 
     {feature==='podcasts' && <PodcastPlatform userId={session.user.id} podcastId={route.podcastId} episodeId={route.episodeId} studio={route.podcastStudio} onClose={closeOverlay} onOpenPodcast={openPodcast} onOpenEpisode={openPodcastEpisode} onOpenProfile={openProfile} onPlayEpisode={setPodcastPlayer}/>} 
     {feature==='profile' && <EditProfile userId={session.user.id} onClose={closeOverlay}/>} 
-    {feature==='sessions' && <SessionsPage userId={session.user.id} onClose={closeOverlay}/>} 
+    {feature==='sessions' && <SessionsPage userId={session.user.id} isHealer={isHealer} onClose={closeOverlay}/>} 
     {feature==='notifications' && <Notifications userId={session.user.id} onClose={closeOverlay}/>} 
     {feature==='safety' && <SafetyCenter onClose={closeOverlay}/>} 
-    {profilePreview && <div className="feature-overlay"><section className="profile-window public-profile-window"><header><div><h2>{profileName(profilePreview)}</h2><p>{roleLabel(profilePreview)}{profilePreview.country?` · ${profilePreview.country}`:''}</p></div><button onClick={closeOverlay}><X/></button></header><div className="public-profile-body"><span className="avatar healer rose public-profile-avatar">{profilePreview.avatar_url?<img src={profilePreview.avatar_url} alt={`${profileName(profilePreview)} profile photo`} loading="lazy"/>:profileInitials(profileName(profilePreview))}<i className={profilePreview.online?'online':''}/></span><p>{profilePreview.about||'This member has not added an introduction yet.'}</p><div className="healer-tags">{[...(approvedProfessional(profilePreview)?profilePreview.specialties||[]:[]),...(profilePreview.interests||[])].slice(0,6).map(tag=><span key={tag}>{tag}</span>)}</div><div className="healer-actions"><button onClick={()=>connectWith(profilePreview)}><UserPlus size={13}/> Connect</button><button onClick={()=>startPrivateMessage(profilePreview)}><MessageCircleMore size={13}/> Message</button>{approvedProfessional(profilePreview)&&<button onClick={()=>openFeature('sessions')}>View sessions</button>}</div></div></section></div>}
+    {profilePreview && <div className="feature-overlay"><section className="profile-window public-profile-window"><header><div><h2>{profileName(profilePreview)}</h2><p>{roleLabel(profilePreview)}{profilePreview.country?` · ${profilePreview.country}`:''}</p></div><button onClick={closeOverlay}><X/></button></header><div className="public-profile-body"><span className="avatar healer rose public-profile-avatar">{profilePreview.avatar_url?<img src={profilePreview.avatar_url} alt={`${profileName(profilePreview)} profile photo`} loading="lazy"/>:profileInitials(profileName(profilePreview))}<i className={profilePreview.online?'online':''}/></span><p>{profilePreview.about||'This member has not added an introduction yet.'}</p><div className="healer-tags">{[...(approvedProfessional(profilePreview)?profilePreview.specialties||[]:[]),...(profilePreview.interests||[])].slice(0,6).map(tag=><span key={tag}>{tag}</span>)}</div><ProfilePreviewActions profile={profilePreview} friendships={friendships} userId={session.user.id} onConnect={connectWith} onMessage={startPrivateMessage} onSessions={()=>openFeature('sessions')} onCreatePodcast={()=>openPodcast('manage')} onCreateSession={()=>openFeature('sessions')}/></div></section></div>}
     {profilePreview && <div className="profile-podcast-sidecar"><ProfilePodcastSection profileId={profilePreview.id} onOpenPodcast={openPodcast}/></div>}
     <PodcastMiniPlayer episode={podcastPlayer} onClose={() => setPodcastPlayer(null)}/>
     {notice && <div className="toast"><ShieldCheck size={17}/>{notice}</div>}
