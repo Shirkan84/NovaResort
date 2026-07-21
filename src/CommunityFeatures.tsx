@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
-import { Bell, Camera, Check, ChevronLeft, Heart, LogOut, MessageCircleMore, Send, ShieldCheck, UsersRound, Video, X } from 'lucide-react'
+import { Bell, Camera, Check, CheckCheck, ChevronLeft, Heart, LogOut, MessageCircleMore, Send, ShieldCheck, Trash2, UsersRound, Video, X } from 'lucide-react'
 import { supabase } from './supabase'
 import './community-lobby.css'
 
@@ -187,12 +187,17 @@ export function EditProfile({userId,onClose}:{userId:string;onClose:()=>void}){
 
 export function Notifications({userId,onClose}:{userId:string;onClose:()=>void}){
   const [items,setItems]=useState<Notice[]>([])
-  const load=()=>supabase.from('notifications').select('*').eq('user_id',userId).order('created_at',{ascending:false}).limit(30).then(({data})=>setItems((data as Notice[])||[]))
+  const load=()=>supabase.from('notifications').select('*').eq('user_id',userId).order('created_at',{ascending:false}).limit(50).then(({data})=>setItems((data as Notice[])||[]))
   useEffect(()=>{load();const c=supabase.channel(`notices-${userId}`).on('postgres_changes',{event:'*',schema:'public',table:'notifications',filter:`user_id=eq.${userId}`},()=>load()).subscribe();return()=>{supabase.removeChannel(c)}},[userId])
-  async function markRead(n:Notice){if(!n.read_at){await supabase.from('notifications').update({read_at:new Date().toISOString()}).eq('id',n.id);window.dispatchEvent(new CustomEvent('nova-notifications-read'))}}
-  async function respond(n:Notice,next_status:'accepted'|'declined'){if(!n.entity_id)return;const {error}=await supabase.rpc('respond_connection_request',{request_id:n.entity_id,next_status});if(error)alert(error.message);else await markRead(n);load()}
+  const unread=items.filter(n=>!n.read_at)
+  async function markRead(n:Notice){if(!n.read_at){await supabase.from('notifications').update({read_at:new Date().toISOString()}).eq('id',n.id);window.dispatchEvent(new CustomEvent('nova-notifications-read'));load()}}
+  async function markAllRead(){if(unread.length===0)return;await supabase.from('notifications').update({read_at:new Date().toISOString()}).eq('user_id',userId).is('read_at',null);window.dispatchEvent(new CustomEvent('nova-notifications-read'));load()}
+  async function dismiss(n:Notice){await supabase.from('notifications').delete().eq('id',n.id);window.dispatchEvent(new CustomEvent('nova-notifications-read'));load()}
+  async function clearRead(){const readIds=items.filter(n=>n.read_at).map(n=>n.id);if(readIds.length===0)return;await supabase.from('notifications').delete().in('id',readIds);load()}
+  async function respond(n:Notice,next_status:'accepted'|'declined'){if(!n.entity_id)return;const {error}=await supabase.rpc('respond_connection_request',{request_id:n.entity_id,next_status});if(error)alert(error.message);else await markRead(n)}
   async function openVideo(n:Notice){await markRead(n);if(n.entity_id){await supabase.from('video_sessions').update({status:'active',started_at:new Date().toISOString()}).eq('id',n.entity_id);window.open(`https://meet.jit.si/NovaResort-${n.entity_id}`,'_blank','noopener,noreferrer')}load()}
-  return <div className="feature-overlay"><section className="notification-window"><header><div><h2>Notifications</h2><p>Invitations and connection updates.</p></div><button onClick={onClose}><X/></button></header>{items.length===0?<div className="empty-state"><Bell/><h3>You’re all caught up</h3></div>:items.map(n=><article className={n.read_at?'notice read':'notice'} key={n.id}><span>{n.type==='video_invite'?<Video/>:<Heart/>}</span><div><b>{n.title}</b><p>{n.body}</p><small>{new Date(n.created_at).toLocaleString()}</small>{n.type==='connection_request'&&n.entity_id?<div className="notice-actions"><button onClick={()=>respond(n,'accepted')}><Check size={14}/> Accept</button><button onClick={()=>respond(n,'declined')}>Deny</button></div>:n.type==='video_invite'?<div className="notice-actions"><button onClick={()=>openVideo(n)}><Video size={14}/> Open invite</button></div>:null}</div></article>)}</section></div>
+  const readItems=items.filter(n=>n.read_at)
+  return <div className="feature-overlay"><section className="notification-window"><header><div><h2>Notifications</h2><p>{unread.length>0?`${unread.length} unread`:'All caught up'}</p></div><div className="notification-header-actions">{unread.length>0&&<button className="notif-action" onClick={markAllRead}><CheckCheck size={14}/> Mark all read</button>}{readItems.length>0&&<button className="notif-action" onClick={clearRead}><Trash2 size={14}/> Clear read</button>}<button onClick={onClose}><X/></button></div></header>{items.length===0?<div className="empty-state"><Bell/><h3>You're all caught up</h3><p>No new notifications.</p></div>:items.map(n=><article className={n.read_at?'notice read':'notice'} key={n.id}><span>{n.type==='video_invite'?<Video/>:<Heart/>}</span><div><b>{n.title}</b><p>{n.body}</p><small>{new Date(n.created_at).toLocaleString()}</small>{n.type==='connection_request'&&n.entity_id?<div className="notice-actions"><button onClick={()=>respond(n,'accepted')}><Check size={14}/> Accept</button><button onClick={()=>respond(n,'declined')}>Deny</button></div>:n.type==='video_invite'?<div className="notice-actions"><button onClick={()=>openVideo(n)}><Video size={14}/> Open invite</button></div>:null}</div><button className="notif-dismiss" onClick={()=>dismiss(n)} title="Dismiss"><X size={14}/></button></article>)}</section></div>
 }
 
 export function SafetyCenter({onClose}:{onClose:()=>void}){
