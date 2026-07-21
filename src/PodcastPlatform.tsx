@@ -20,7 +20,7 @@ type Episode = {
   audio_path: string | null; audio_url: string | null; audio_duration_seconds: number; cover_image_url: string | null;
   visibility: string; status: string; published_at: string | null; comments_enabled: boolean; reactions_enabled: boolean;
   transcript: string | null; saved: boolean; listen_position_seconds: number; tags: string[]; total_count: number;
-  content_warning?: string | null; explicit_content?: boolean
+  content_warning?: string | null; explicit_content?: boolean; show_notes?: string | null
 }
 type ProfilePodcast = Pick<Podcast, 'id' | 'title' | 'short_description' | 'cover_image_url' | 'follower_count' | 'episode_count' | 'total_plays' | 'latest_episode_title' | 'tags'>
 export type PlayerEpisode = Episode & { podcast_title: string; creator_name: string }
@@ -30,16 +30,17 @@ type StudioEpisode = {
   id: string; podcast_id: string; title: string; description: string; episode_number: number; season_number: number | null;
   audio_path: string | null; audio_url: string | null; audio_duration_seconds: number; cover_image_url: string | null;
   cover_path: string | null; visibility: string; status: string; published_at: string | null;
-  comments_enabled: boolean; reactions_enabled: boolean; transcript: string | null;
+  comments_enabled: boolean; reactions_enabled: boolean; transcript: string | null; show_notes: string | null;
   content_warning: string | null; explicit_content: boolean; created_at: string; deleted_at: string | null
 }
 
 const categories = ['all', 'Mindfulness', 'Meditation', 'Emotional Healing', 'Personal Coaching', 'Relationships', 'Stress Management', 'Anxiety Support', 'Self Growth', 'Breathwork', 'Sleep', 'Confidence', 'Parenting', 'Grief', 'Trauma Awareness', 'Wellness Education', 'Spiritual Growth', 'Motivation', 'Healthy Habits']
 const speeds = [0.75, 1, 1.25, 1.5, 2]
-const AUDIO_TYPES = ['audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/webm', 'audio/aac', 'audio/x-m4a']
+const AUDIO_TYPES = ['audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/x-m4a']
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_AUDIO = 100 * 1024 * 1024
 const MAX_IMAGE = 5 * 1024 * 1024
+const MAX_DURATION = 1200
 const SIGNED_URL_EXPIRY = 31536000
 
 const initials = (name?: string | null) => (name || 'N').split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase()
@@ -51,7 +52,7 @@ const slugify = (value: string) => value.toLowerCase().trim().replace(/[^a-z0-9]
 const safeFileName = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, '-')
 
 function Cover({ src, title }: { src?: string | null; title: string }) {
-  return <span className="podcast-cover">{src ? <img src={src} alt={`${title} cover`} /> : <Headphones aria-hidden="true" />}</span>
+  return <span className="podcast-cover">{src ? <img src={src} alt={`${title} cover`} loading="lazy" /> : <Headphones aria-hidden="true" />}</span>
 }
 
 function Creator({ podcast, onOpenProfile }: { podcast: Podcast; onOpenProfile: (id: string) => void }) {
@@ -116,6 +117,8 @@ export function PopularPodcastsStrip({ onOpenPodcast, onPlayEpisode, onOpenProfi
   </section>
 }
 
+let currentAudio: HTMLAudioElement | null = null
+
 export function PodcastMiniPlayer({ episode, onClose }: { episode: PlayerEpisode | null; onClose: () => void }) {
   const audio = useRef<HTMLAudioElement | null>(null)
   const [playing, setPlaying] = useState(false)
@@ -130,7 +133,7 @@ export function PodcastMiniPlayer({ episode, onClose }: { episode: PlayerEpisode
   const saveProgress = () => supabase.rpc('record_podcast_play', { episode_ref: episode.id, position_seconds: Math.floor(position), duration_seconds: Math.floor(durationState || episode.audio_duration_seconds || 0) })
   return <aside className="podcast-player" aria-label="Podcast player">
     <audio ref={audio} src={src} onLoadedMetadata={e => { setDurationState(Math.floor(e.currentTarget.duration || episode.audio_duration_seconds || 0)); if (episode.listen_position_seconds) e.currentTarget.currentTime = episode.listen_position_seconds }} onTimeUpdate={e => setPosition(Math.floor(e.currentTarget.currentTime))} onPause={saveProgress} onEnded={() => { setPlaying(false); saveProgress() }} />
-    <button aria-label={playing ? 'Pause episode' : 'Play episode'} disabled={!src} onClick={() => { if (!audio.current) return; if (playing) { audio.current.pause(); setPlaying(false) } else { audio.current.play().then(() => setPlaying(true)).catch(() => setPlaying(false)) } }}>{playing ? <Pause /> : <Play />}</button>
+    <button aria-label={playing ? 'Pause episode' : 'Play episode'} disabled={!src} onClick={() => { if (!audio.current) return; if (playing) { audio.current.pause(); setPlaying(false) } else { if (currentAudio && currentAudio !== audio.current) { currentAudio.pause() }; currentAudio = audio.current; audio.current.play().then(() => setPlaying(true)).catch(() => setPlaying(false)) } }}>{playing ? <Pause /> : <Play />}</button>
     <div><b>{episode.title}</b><span>{episode.podcast_title} by {episode.creator_name}</span><input aria-label="Seek podcast" type="range" min={0} max={durationState || episode.audio_duration_seconds || 1} value={position} onChange={e => { const next = Number(e.target.value); setPosition(next); if (audio.current) audio.current.currentTime = next }} /><small>{duration(position)} / {duration(durationState || episode.audio_duration_seconds)}</small></div>
     <button aria-label="Skip back 15 seconds" onClick={() => { if (audio.current) audio.current.currentTime = Math.max(0, audio.current.currentTime - 15) }}><SkipBack /></button>
     <button aria-label="Skip forward 30 seconds" onClick={() => { if (audio.current) audio.current.currentTime = Math.min(durationState || 999999, audio.current.currentTime + 30) }}><SkipForward /></button>
@@ -251,6 +254,7 @@ function EpisodeList({ podcast, onPlay, selectedEpisodeId }: { podcast: Podcast;
         {selected.saved && <button onClick={() => save(selected)}><Bookmark size={14} fill="currentColor" /> Saved</button>}
       </div>
       {selected.transcript && <details className="transcript-details"><summary><FileAudio size={14} /> Transcript</summary><p>{selected.transcript}</p></details>}
+      {selected.show_notes && <details className="transcript-details"><summary><FileAudio size={14} /> Show Notes</summary><p>{selected.show_notes}</p></details>}
       {selected.comments_enabled ? <form className="comment-form" onSubmit={addComment}><input value={comment} onChange={e => setComment(e.target.value)} placeholder="Add a calm, respectful comment" /><button><Send size={14} /> Comment</button></form> : <p className="muted">Comments are disabled for this episode.</p>}
       {selected.comments_enabled && <div className="comment-list">{comments.map(c => <article key={c.id}><b>{c.profiles?.display_name || c.profiles?.full_name || 'Nova member'}</b><p>{c.body}</p><time>{new Date(c.created_at).toLocaleString()}</time></article>)}</div>}
     </section>}
@@ -266,10 +270,12 @@ function PodcastStudio({ userId }: { userId: string }) {
   const [episodes, setEpisodes] = useState<StudioEpisode[]>([])
   const [episodesLoading, setEpisodesLoading] = useState(false)
   const [editingEpisodeId, setEditingEpisodeId] = useState<string | null>(null)
+  const [episodeFilter, setEpisodeFilter] = useState<'all' | 'draft' | 'published'>('all')
   const [recording, setRecording] = useState(false)
   const [recordedUrl, setRecordedUrl] = useState('')
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [coverPreview, setCoverPreview] = useState<string | null>(null)
+  const [storageBytes, setStorageBytes] = useState<number>(0)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
 
@@ -297,7 +303,7 @@ function PodcastStudio({ userId }: { userId: string }) {
   }, [userId])
 
   useEffect(() => { loadCreatorStatus() }, [loadCreatorStatus])
-  useEffect(() => { if (creatorStatus?.eligible) loadPodcasts() }, [creatorStatus, loadPodcasts])
+  useEffect(() => { if (creatorStatus?.eligible) { loadPodcasts(); supabase.rpc('get_podcast_storage_usage', { creator: userId }).then(({ data }) => setStorageBytes(Number(data) || 0)) } }, [creatorStatus, loadPodcasts, userId])
 
   function showMsg(text: string) { setMessage(text); setTimeout(() => setMessage(''), 4000) }
 
@@ -313,7 +319,7 @@ function PodcastStudio({ userId }: { userId: string }) {
   }
 
   async function uploadAudioFile(file: File): Promise<{ path: string; url: string; duration: number } | null> {
-    if (!AUDIO_TYPES.includes(file.type)) { showMsg('Unsupported audio type. Use MP3, M4A, WAV, WebM, or AAC.'); return null }
+    if (!AUDIO_TYPES.includes(file.type)) { showMsg('Unsupported audio type. Use MP3, M4A, or AAC.'); return null }
     if (file.size > MAX_AUDIO) { showMsg('Audio must be under 100MB.'); return null }
     const audioDuration = await new Promise<number>(resolve => {
       const a = new Audio()
@@ -321,6 +327,7 @@ function PodcastStudio({ userId }: { userId: string }) {
       a.onloadedmetadata = () => { resolve(Math.floor(a.duration || 0)); URL.revokeObjectURL(a.src) }
       a.onerror = () => { resolve(0); URL.revokeObjectURL(a.src) }
     })
+    if (audioDuration > MAX_DURATION) { showMsg(`Episode duration is ${duration(audioDuration)}. Maximum allowed is 20 minutes.`); return null }
     const path = `${userId}/${crypto.randomUUID()}-${safeFileName(file.name)}`
     setUploadProgress(0)
     const { error } = await supabase.storage.from('podcast-audio').upload(path, file, {
@@ -386,6 +393,8 @@ function PodcastStudio({ userId }: { userId: string }) {
 
   async function togglePublishPodcast(podcast: Podcast) {
     const newStatus = podcast.status === 'published' ? 'draft' : 'published'
+    if (newStatus === 'published' && !window.confirm(`Publish "${podcast.title}"? It will become visible to all members.`)) return
+    if (newStatus === 'draft' && !window.confirm(`Unpublish "${podcast.title}"? It will be hidden from public listings.`)) return
     const { error } = await supabase.from('podcasts').update({
       status: newStatus,
       published_at: newStatus === 'published' ? new Date().toISOString() : null,
@@ -423,6 +432,7 @@ function PodcastStudio({ userId }: { userId: string }) {
     const { error } = await supabase.from('podcast_episodes').insert({
       podcast_id: selectedPodcast.id, creator_id: userId, title,
       description: String(form.get('description') || ''),
+      show_notes: String(form.get('show_notes') || ''),
       season_number: form.get('season_number') ? Number(form.get('season_number')) : null,
       episode_number: Number(form.get('episode_number') || 1),
       audio_path: audioResult.path, audio_url: audioResult.url,
@@ -461,6 +471,8 @@ function PodcastStudio({ userId }: { userId: string }) {
 
   async function togglePublishEpisode(ep: StudioEpisode) {
     const newStatus = ep.status === 'published' ? 'draft' : 'published'
+    if (newStatus === 'published' && !window.confirm(`Publish episode "${ep.title}"? It will become publicly available.`)) return
+    if (newStatus === 'draft' && !window.confirm(`Unpublish episode "${ep.title}"? It will be hidden from listeners.`)) return
     const { error } = await supabase.from('podcast_episodes').update({
       status: newStatus, published_at: newStatus === 'published' ? new Date().toISOString() : null, updated_at: new Date().toISOString()
     }).eq('id', ep.id)
@@ -506,6 +518,7 @@ function PodcastStudio({ userId }: { userId: string }) {
   return <div className="podcast-studio">
     {message && <p className="studio-message">{message}</p>}
     {uploadProgress !== null && <div className="upload-progress"><div className="upload-bar" style={{ width: `${uploadProgress}%` }} /><small>{uploadProgress}% uploaded</small></div>}
+    {storageBytes > 0 && <div className="storage-usage">Storage used: {(storageBytes / (1024 * 1024)).toFixed(1)} MB</div>}
 
     {studioView === 'list' && <>
       <div className="studio-section-header">
@@ -587,7 +600,10 @@ function PodcastStudio({ userId }: { userId: string }) {
           <button onClick={() => { setStudioView('list'); setSelectedPodcast(null) }}><ChevronLeft size={14} /> Back</button>
         </div>
       </div>
-      {episodesLoading ? <div className="empty-state">Loading episodes...</div> : episodes.length === 0 ? <div className="empty-state"><Radio /><h3>No episodes yet</h3><p>Create your first episode to start sharing audio content.</p></div> : <div className="studio-list">{episodes.map(ep => <article key={ep.id} className="studio-episode-card">
+      <div className="episode-filter-tabs">
+        {(['all', 'draft', 'published'] as const).map(tab => <button key={tab} className={episodeFilter === tab ? 'active' : ''} onClick={() => setEpisodeFilter(tab)}>{tab === 'all' ? 'All' : tab === 'draft' ? 'Drafts' : 'Published'}{tab !== 'all' && <span className="filter-count">{episodes.filter(e => e.status === tab).length}</span>}</button>)}
+      </div>
+      {episodesLoading ? <div className="empty-state">Loading episodes...</div> : episodes.length === 0 ? <div className="empty-state"><Radio /><h3>No episodes yet</h3><p>Create your first episode to start sharing audio content.</p></div> : <div className="studio-list">{episodes.filter(ep => episodeFilter === 'all' || ep.status === episodeFilter).map(ep => <article key={ep.id} className="studio-episode-card">
         <div className="studio-episode-info">
           <div className="episode-meta-line"><span>E{ep.episode_number}</span>{ep.season_number != null && <span>S{ep.season_number}</span>}<span>{duration(ep.audio_duration_seconds)}</span><span className={`status-badge ${ep.status}`}>{ep.status}</span></div>
           <b>{ep.title}</b>
@@ -614,7 +630,8 @@ function PodcastStudio({ userId }: { userId: string }) {
           <label>Episode number<input name="episode_number" type="number" min="1" defaultValue="1" required /></label>
         </div>
         <label>Description<textarea name="description" maxLength={8000} placeholder="Episode description" /></label>
-        <label>Audio file<small>Required. Max 100MB. MP3, M4A, WAV, WebM, or AAC.</small><input type="file" name="audio_file" accept="audio/mpeg,audio/mp4,audio/wav,audio/webm,audio/aac,audio/x-m4a" required /></label>
+        <label>Show notes<small>Optional detailed notes for this episode.</small><textarea name="show_notes" maxLength={10000} placeholder="Detailed show notes (optional)" /></label>
+        <label>Audio file<small>Required. Max 100MB, max 20 minutes. MP3, M4A, or AAC.</small><input type="file" name="audio_file" accept="audio/mpeg,audio/mp4,audio/aac,audio/x-m4a" required /></label>
         <label>Cover image<small>Optional. Leave empty to use podcast cover.</small>
           <div className="cover-upload">{coverPreview ? <img src={coverPreview} alt="Cover preview" /> : <div className="cover-placeholder"><Upload size={20} /> Click to upload cover</div>}
             <input type="file" name="cover_image" accept="image/jpeg,image/png,image/webp" onChange={e => { const f = e.target.files?.[0]; if (f) setCoverPreview(URL.createObjectURL(f)) }} />
@@ -675,13 +692,14 @@ function EpisodeEditForm({ podcast, episodeId, userId, uploadCoverImage, onBack,
     const audioFile = form.get('audio_file') as File | null
     let audio_path = episode.audio_path, audio_url = episode.audio_url, audio_duration = episode.audio_duration_seconds
     if (audioFile && audioFile.size > 0) {
-      if (!AUDIO_TYPES.includes(audioFile.type)) { showMsg('Unsupported audio type.'); return }
+      if (!AUDIO_TYPES.includes(audioFile.type)) { showMsg('Unsupported audio type. Use MP3, M4A, or AAC.'); return }
       if (audioFile.size > MAX_AUDIO) { showMsg('Audio must be under 100MB.'); return }
       const audioDuration = await new Promise<number>(resolve => {
         const a = new Audio(); a.src = URL.createObjectURL(audioFile)
         a.onloadedmetadata = () => { resolve(Math.floor(a.duration || 0)); URL.revokeObjectURL(a.src) }
         a.onerror = () => { resolve(0); URL.revokeObjectURL(a.src) }
       })
+      if (audioDuration > MAX_DURATION) { showMsg(`Episode duration is ${Math.floor(audioDuration / 60)}:${String(audioDuration % 60).padStart(2, '0')}. Maximum allowed is 20 minutes.`); return }
       const path = `${userId}/${crypto.randomUUID()}-${safeFileName(audioFile.name)}`
       setUploadProgress(0)
       const { error } = await supabase.storage.from('podcast-audio').upload(path, audioFile, { contentType: audioFile.type })
@@ -699,6 +717,7 @@ function EpisodeEditForm({ podcast, episodeId, userId, uploadCoverImage, onBack,
     }
     const { error } = await supabase.from('podcast_episodes').update({
       title: String(form.get('title') || ''), description: String(form.get('description') || ''),
+      show_notes: String(form.get('show_notes') || ''),
       season_number: form.get('season_number') ? Number(form.get('season_number')) : null,
       episode_number: Number(form.get('episode_number') || 1),
       audio_path, audio_url, audio_duration_seconds: audio_duration,
@@ -732,8 +751,9 @@ function EpisodeEditForm({ podcast, episodeId, userId, uploadCoverImage, onBack,
         <label>Episode number<input name="episode_number" type="number" min="1" defaultValue={episode.episode_number} required /></label>
       </div>
       <label>Description<textarea name="description" maxLength={8000} defaultValue={episode.description} /></label>
+      <label>Show notes<small>Optional detailed notes.</small><textarea name="show_notes" maxLength={10000} defaultValue={(episode as any).show_notes || ''} placeholder="Detailed show notes" /></label>
       {episode.audio_url && <div className="current-audio"><small>Current audio:</small><audio controls src={episode.audio_url} preload="none" /></div>}
-      <label>Replace audio file<small>Leave empty to keep current audio.</small><input type="file" name="audio_file" accept="audio/mpeg,audio/mp4,audio/wav,audio/webm,audio/aac,audio/x-m4a" /></label>
+      <label>Replace audio file<small>Leave empty to keep current audio. Max 100MB, max 20 minutes.</small><input type="file" name="audio_file" accept="audio/mpeg,audio/mp4,audio/aac,audio/x-m4a" /></label>
       <label>Cover image<small>Leave empty to keep current cover.</small>
         <div className="cover-upload">{coverPreview ? <img src={coverPreview} alt="Cover preview" /> : <div className="cover-placeholder"><Upload size={20} /> Click to upload cover</div>}
           <input type="file" name="cover_image" accept="image/jpeg,image/png,image/webp" onChange={e => { const f = e.target.files?.[0]; if (f) setCoverPreview(URL.createObjectURL(f)) }} />
@@ -787,13 +807,31 @@ export function PodcastPlatform({ userId, isHealer, podcastId, episodeId, studio
 
   useEffect(() => {
     if (!podcastId) { setSelected(null); return }
-    supabase.rpc('search_podcasts', { search_text: '', category_filter: 'all', language_filter: 'all', tag_filter: 'all', sort_by: 'popular', page_limit: 24, page_offset: 0 }).then(({ data }) => {
-      const podcast = ((data as Podcast[]) || []).find(p => p.id === podcastId) || null
-      setSelected(podcast)
-      if (podcast) {
-        supabase.from('podcast_follows').select('podcast_id').eq('podcast_id', podcast.id).eq('user_id', userId).maybeSingle().then(({ data }) => setFollowing(Boolean(data)))
-      }
+    let live = true
+    supabase.from('podcasts').select('*').eq('id', podcastId).single().then(async ({ data }) => {
+      if (!live || !data) { if (live) setSelected(null); return }
+      const { data: creator } = await supabase.from('profiles').select('display_name,full_name,avatar_url,professional_verification_status').eq('id', data.creator_id).single()
+      const [{ count: followerCount }, { count: episodeCount }] = await Promise.all([
+        supabase.from('podcast_follows').select('podcast_id', { count: 'exact', head: true }).eq('podcast_id', podcastId),
+        supabase.from('podcast_episodes').select('id', { count: 'exact', head: true }).eq('podcast_id', podcastId).eq('status', 'published').is('deleted_at', null)
+      ])
+      if (!live) return
+      setSelected({
+        ...data,
+        creator_name: creator?.display_name || creator?.full_name || 'Unknown',
+        creator_avatar_url: creator?.avatar_url || null,
+        professional_title: creator?.display_name || null,
+        verified: creator?.professional_verification_status === 'approved',
+        follower_count: followerCount || 0,
+        episode_count: episodeCount || 0,
+        total_plays: 0,
+        tags: [],
+        popularity_score: 0,
+        total_count: 1
+      })
+      supabase.from('podcast_follows').select('podcast_id').eq('podcast_id', podcastId).eq('user_id', userId).maybeSingle().then(({ data: followData }) => { if (live) setFollowing(Boolean(followData)) })
     })
+    return () => { live = false }
   }, [podcastId, userId])
 
   async function follow() {

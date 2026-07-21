@@ -85,6 +85,43 @@ const rooms: Room[] = [
   { title: 'Self Growth', description: 'Celebrate progress, share intentions, and grow together.', people: 21, color: 'lavender', icon: '⌁', tags: ['Open', 'Community'] },
 ]
 
+function HealerPodcastDashboard({ userId, onOpenStudio, onOpenPodcast }: { userId: string; onOpenStudio: () => void; onOpenPodcast: (id: string) => void }) {
+  const [stats, setStats] = useState({ podcastCount: 0, draftCount: 0, publishedCount: 0 })
+  const [recentEpisodes, setRecentEpisodes] = useState<any[]>([])
+  useEffect(() => {
+    let live = true
+    Promise.all([
+      supabase.from('podcasts').select('id,status', { count: 'exact' }).eq('creator_id', userId),
+      supabase.from('podcast_episodes').select('id,status,title,audio_duration_seconds,created_at,podcast_id,podcasts(title)').eq('creator_id', userId).is('deleted_at', null).order('created_at', { ascending: false }).limit(5)
+    ]).then(([podcastResult, episodeResult]) => {
+      if (!live) return
+      const podcasts = podcastResult.data || []
+      const podcastCount = podcasts.length
+      const draftCount = podcasts.filter(p => p.status === 'draft').length
+      const publishedCount = podcasts.filter(p => p.status === 'published').length
+      setStats({ podcastCount, draftCount, publishedCount })
+      setRecentEpisodes(episodeResult.data || [])
+    })
+    return () => { live = false }
+  }, [userId])
+  if (stats.podcastCount === 0 && recentEpisodes.length === 0) return null
+  return <section className="healer-podcast-dashboard">
+    <div className="section-head"><div><h2>Podcast Studio</h2><p>Your podcast content at a glance.</p></div><button onClick={onOpenStudio}>Open Studio <ChevronRight size={16}/></button></div>
+    <div className="healer-podcast-stats">
+      <div className="healer-stat"><b>{stats.podcastCount}</b><span>{stats.podcastCount === 1 ? 'Show' : 'Shows'}</span></div>
+      <div className="healer-stat"><b>{stats.publishedCount}</b><span>Published</span></div>
+      <div className="healer-stat"><b>{stats.draftCount}</b><span>Drafts</span></div>
+    </div>
+    {recentEpisodes.length > 0 && <div className="healer-recent-episodes">
+      <h4>Recent episodes</h4>
+      {recentEpisodes.map(ep => <button key={ep.id} className="healer-episode-row" onClick={() => onOpenPodcast(ep.podcast_id)}>
+        <div><b>{ep.title}</b><small>{(ep.podcasts as any)?.title || 'Podcast'}</small></div>
+        <span className={`status-badge ${ep.status}`}>{ep.status}</span>
+      </button>)}
+    </div>}
+  </section>
+}
+
 function Logo() {
   return <div className="logo"><div className="logo-mark"><Leaf size={20} /><Sparkles size={10} /></div><div><b>nova</b><span>resort</span></div></div>
 }
@@ -489,6 +526,8 @@ function App() {
             </section>
 
             <PopularPodcastsStrip onOpenPodcast={openPodcast} onPlayEpisode={setPodcastPlayer} onOpenProfile={openProfile}/>
+
+            {canCreateContent && <HealerPodcastDashboard userId={session.user.id} onOpenStudio={() => openPodcast('manage')} onOpenPodcast={openPodcast}/>}
 
             <section>
               <div className="section-head"><div><h2>Find your space</h2><p>Join a conversation that feels right for you today.</p></div><button onClick={() => setShowAllRooms(!showAllRooms)}>{showAllRooms?'Show fewer rooms':'View all rooms'} <ChevronRight size={16}/></button></div>
