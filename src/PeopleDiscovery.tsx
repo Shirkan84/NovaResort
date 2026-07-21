@@ -18,10 +18,6 @@ const MEMBER_PAGE_SIZE = 24
 const professionalTypes = [
   ['all','All professionals'],
   ['healer','Healers'],
-  ['therapist','Therapists'],
-  ['coach','Coaches'],
-  ['mindfulness_teacher','Mindfulness teachers'],
-  ['wellness_professional','Wellness professionals'],
 ] as const
 const availabilityOptions = ['all','available','weekdays','weekends','evenings','online'] as const
 
@@ -200,7 +196,7 @@ function HealerCard({ healer, userId, friendships, reload, onClose, onOpenRoom, 
     onOpenRoom({ id:data, name:nameOf(healer), description:'Private two-person conversation', icon:'<>', theme:'sage', is_private:true })
   }
 
-  const verified = healer.professional_verification_status === 'approved'
+  const verified = healer.profile_type === 'healer'
   return <article className="healer-directory-card">
     <button className="healer-directory-photo" onClick={() => onOpenProfile(healer.id)} aria-label={`View ${nameOf(healer)} profile`}>
       {healer.avatar_url ? <img src={healer.avatar_url} alt={`${nameOf(healer)} profile photo`}/> : initials(nameOf(healer))}

@@ -12,7 +12,8 @@ import { PrivateChats, PrivateChatRoom } from './PrivateMessaging'
 import { DiscoverPeople, HealersDirectory } from './PeopleDiscovery'
 import { SessionsPage } from './SessionsEvents'
 import { PodcastPlatform, PodcastMiniPlayer, PopularPodcastsStrip, ProfilePodcastSection, PlayerEpisode } from './PodcastPlatform'
-import { getFeaturedHealers, PROFESSIONAL_ROLES } from './services/healers'
+import { getFeaturedHealers } from './services/healers'
+import { useUserRole } from './hooks/useUserRole'
 import { applyLanguage, getLanguage, switchLanguage } from './i18n'
 import './social-home.css'
 
@@ -90,9 +91,7 @@ function Logo() {
 
 const profileName = (profile:LiveProfile) => profile.display_name || profile.full_name || 'Nova member'
 const profileInitials = (name?:string|null) => (name || 'N').split(' ').map(part => part[0]).join('').slice(0,2).toUpperCase()
-const healerRoles = [...PROFESSIONAL_ROLES]
-const approvedProfessional = (profile:LiveProfile) => profile.professional_verification_status === 'approved' && healerRoles.includes(profile.profile_type as typeof healerRoles[number])
-const roleLabel = (profile:LiveProfile) => approvedProfessional(profile) ? (profile.professional_title || 'Verified Healer') : profile.profile_type === 'admin' ? 'Administrator' : 'Regular Member'
+const roleLabel = (profile:LiveProfile) => profile.profile_type === 'healer' ? (profile.professional_title || 'Healer') : profile.profile_type === 'admin' ? 'Administrator' : 'Member'
 const relationshipFor = (id:string, rows:Friendship[]) => rows.find(row => row.requester_id === id || row.addressee_id === id)
 
 function AuthScreen() {
@@ -158,7 +157,7 @@ function AuthScreen() {
         } : null
         const { data:authData, error } = await supabase.auth.signUp({ email, password, options: {
           emailRedirectTo: BASE_URL,
-          data: { full_name: fullName, profile_type: 'member', requested_profile_type: requestedType, country: data.get('country'), healer_application: healerApplication }
+          data: { full_name: fullName, profile_type: requestedType, requested_profile_type: requestedType, country: data.get('country'), healer_application: healerApplication }
         }})
         if (error) throw error
         if (requestedType === 'healer' && authData.user && authData.session && healerDocuments.length) {
@@ -169,7 +168,7 @@ function AuthScreen() {
             if (!uploadError) await supabase.from('healer_application_documents').insert({application_id:application?.id||null,user_id:authData.user.id,storage_path:path,original_name:file.name,mime_type:file.type,file_size:file.size})
           }
         }
-        setMessage(requestedType === 'healer' ? 'Your account was created as a Regular Member and your healer application is pending administrator review. Please check your email to verify your account.' : 'Welcome to Nova Resort. Please check your email to verify your account.')
+        setMessage(requestedType === 'healer' ? 'Your healer account is ready. You can create sessions and podcasts right away. Please check your email to verify your account.' : 'Welcome to Nova Resort. Please check your email to verify your account.')
       } else if (mode === 'reset') {
         const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: BASE_URL })
         if (error) throw error
@@ -189,7 +188,7 @@ function AuthScreen() {
       <p>{mode === 'register' ? 'Join a community where you can feel seen and supported.' : mode === 'reset' ? 'We’ll send a secure reset link to your email.' : 'Sign in to return to your community.'}</p>
       {message && <div className="form-message success"><ShieldCheck size={17}/>{message}</div>}{error && <div className="form-message error">{error}</div>}
       <form onSubmit={submit}>
-        {mode === 'register' && <><label>Full name<input name="fullName" required placeholder="Your full name"/></label><div className="form-row"><label>Country<input name="country" required placeholder="Your country"/></label><label>Profile type<select name="profileType" value={profileType} onChange={event=>setProfileType(event.target.value)}><option value="member">Community member</option><option value="healer">Healer / Therapist</option></select></label></div>{profileType==='healer'&&<section className="healer-registration"><h3>Healer Registration Requirements</h3><p>Healer accounts are created as Regular Member accounts until an administrator reviews and approves the application.</p><div className="form-row"><label>Professional Title<select name="professionalTitle" required value={professionalTitle} onChange={event=>setProfessionalTitle(event.target.value)}><option value="">Choose title</option>{professionalTitles.map(title=><option key={title}>{title}</option>)}</select></label>{professionalTitle==='Other'&&<label>Custom title<input name="professionalTitleOther" required placeholder="Your professional title"/></label>}</div><fieldset><legend>Areas of Expertise</legend><div className="option-grid">{specialties.map(item=><label key={item}><input type="checkbox" name="specialties" value={item}/>{item}</label>)}</div><input name="specialtiesOther" placeholder="Other specialties, separated by commas"/></fieldset><label>Professional Biography<textarea name="professionalBiography" required maxLength={2000} placeholder="Who you are, your approach, experience, and how you help people."/></label><label>Education<textarea name="education" required placeholder="One per line: Institution | Program or Degree | Country | Graduation Year"/></label><label>Professional Certifications<textarea name="certifications" required placeholder="One per line: Certificate | Issuing Organization | Issue Date | Expiration Date | Certificate Number"/></label><label>Upload Supporting Documents<input type="file" name="healerDocuments" required multiple accept="application/pdf,image/jpeg,image/png"/></label><div className="form-row"><label>Years of Experience<input type="number" name="yearsExperience" required min={0}/></label><label>City<input name="city" placeholder="Optional"/></label></div><fieldset><legend>Languages Spoken</legend><div className="option-grid compact">{languages.map(item=><label key={item}><input type="checkbox" name="languages" value={item}/>{item}</label>)}</div><input name="languagesOther" placeholder="Other languages, separated by commas"/></fieldset><div className="form-row"><label>Professional Website<input type="url" name="professionalWebsite" placeholder="https://"/></label><label>LinkedIn Profile<input type="url" name="linkedinProfile" placeholder="https://linkedin.com/in/..."/></label></div><div className="form-row"><label>License Number<input name="licenseNumber"/></label><label>Licensing Authority<input name="licensingAuthority"/></label></div><label>License Country<input name="licenseCountry"/></label><label>Insurance Accepted<input name="insuranceAccepted" placeholder="Optional, separated by commas"/></label><fieldset><legend>Online Session Availability</legend><div className="option-grid compact"><label><input type="radio" name="sessionAvailability" value="online" required/>Online Sessions</label><label><input type="radio" name="sessionAvailability" value="in_person"/>In-Person Sessions</label><label><input type="radio" name="sessionAvailability" value="both"/>Both</label></div></fieldset><fieldset><legend>Session Types</legend><div className="option-grid compact">{['Individual','Couples','Family','Group','Workshops','Courses'].map(item=><label key={item}><input type="checkbox" name="sessionTypes" value={item}/>{item}</label>)}</div></fieldset></section>}</>}
+        {mode === 'register' && <><label>Full name<input name="fullName" required placeholder="Your full name"/></label><div className="form-row"><label>Country<input name="country" required placeholder="Your country"/></label><label>Profile type<select name="profileType" value={profileType} onChange={event=>setProfileType(event.target.value)}><option value="member">Community member</option><option value="healer">Healer / Therapist</option></select></label></div>{profileType==='healer'&&<section className="healer-registration"><h3>Healer Registration</h3><p>Healer accounts can create sessions and podcasts immediately after registration.</p><div className="form-row"><label>Professional Title<select name="professionalTitle" required value={professionalTitle} onChange={event=>setProfessionalTitle(event.target.value)}><option value="">Choose title</option>{professionalTitles.map(title=><option key={title}>{title}</option>)}</select></label>{professionalTitle==='Other'&&<label>Custom title<input name="professionalTitleOther" required placeholder="Your professional title"/></label>}</div><fieldset><legend>Areas of Expertise</legend><div className="option-grid">{specialties.map(item=><label key={item}><input type="checkbox" name="specialties" value={item}/>{item}</label>)}</div><input name="specialtiesOther" placeholder="Other specialties, separated by commas"/></fieldset><label>Professional Biography<textarea name="professionalBiography" required maxLength={2000} placeholder="Who you are, your approach, experience, and how you help people."/></label><label>Education<textarea name="education" required placeholder="One per line: Institution | Program or Degree | Country | Graduation Year"/></label><label>Professional Certifications<textarea name="certifications" required placeholder="One per line: Certificate | Issuing Organization | Issue Date | Expiration Date | Certificate Number"/></label><label>Upload Supporting Documents<input type="file" name="healerDocuments" required multiple accept="application/pdf,image/jpeg,image/png"/></label><div className="form-row"><label>Years of Experience<input type="number" name="yearsExperience" required min={0}/></label><label>City<input name="city" placeholder="Optional"/></label></div><fieldset><legend>Languages Spoken</legend><div className="option-grid compact">{languages.map(item=><label key={item}><input type="checkbox" name="languages" value={item}/>{item}</label>)}</div><input name="languagesOther" placeholder="Other languages, separated by commas"/></fieldset><div className="form-row"><label>Professional Website<input type="url" name="professionalWebsite" placeholder="https://"/></label><label>LinkedIn Profile<input type="url" name="linkedinProfile" placeholder="https://linkedin.com/in/..."/></label></div><div className="form-row"><label>License Number<input name="licenseNumber"/></label><label>Licensing Authority<input name="licensingAuthority"/></label></div><label>License Country<input name="licenseCountry"/></label><label>Insurance Accepted<input name="insuranceAccepted" placeholder="Optional, separated by commas"/></label><fieldset><legend>Online Session Availability</legend><div className="option-grid compact"><label><input type="radio" name="sessionAvailability" value="online" required/>Online Sessions</label><label><input type="radio" name="sessionAvailability" value="in_person"/>In-Person Sessions</label><label><input type="radio" name="sessionAvailability" value="both"/>Both</label></div></fieldset><fieldset><legend>Session Types</legend><div className="option-grid compact">{['Individual','Couples','Family','Group','Workshops','Courses'].map(item=><label key={item}><input type="checkbox" name="sessionTypes" value={item}/>{item}</label>)}</div></fieldset></section>}</>}
         <label>Email address<input type="email" name="email" required placeholder="you@example.com"/></label>
         {mode !== 'reset' && <label>Password<input type="password" name="password" required minLength={8} placeholder="At least 8 characters"/></label>}
         {mode === 'register' && <><label>Confirm password<input type="password" name="confirmPassword" required minLength={8} placeholder="Repeat your password"/></label><label className="check-label"><input type="checkbox" name="guidelines"/>I agree to the Community Guidelines and Privacy Policy.</label></>}
@@ -208,8 +207,8 @@ function ProfilePreviewActions({profile,friendships,userId,onConnect,onMessage,o
   return <div className="healer-actions">
     {!isOwn && <button onClick={()=>onConnect(profile)} disabled={rel?.status==='accepted'}><UserPlus size={13}/> {label}</button>}
     {!isOwn && <button onClick={()=>onMessage(profile)}><MessageCircleMore size={13}/> Message</button>}
-    {approvedProfessional(profile) && !isOwn && <button onClick={onSessions}>View sessions</button>}
-    {isOwn && approvedProfessional(profile) && <>
+    {profile.profile_type === 'healer' && !isOwn && <button onClick={onSessions}>View sessions</button>}
+    {isOwn && profile.profile_type === 'healer' && <>
       <button className="healer-create-action" onClick={onCreatePodcast}><Mic size={13}/> Create podcast</button>
       <button className="healer-create-action" onClick={onCreateSession}><CalendarDays size={13}/> Create session</button>
     </>}
@@ -243,7 +242,7 @@ function App() {
   const [podcastPlayer,setPodcastPlayer] = useState<PlayerEpisode|null>(null)
   const [signingOut,setSigningOut] = useState(false)
   const [metrics,setMetrics] = useState({members:0,online:0,healers:0,rooms:0,sessions:0,notifications:0,connections:0})
-  const [isHealer,setIsHealer] = useState(false)
+  const { canCreateContent } = useUserRole(session?.user?.id ?? null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setAuthLoading(false) })
@@ -322,11 +321,11 @@ function App() {
       try {
         const fiveMinutesAgo=new Date(Date.now()-5*60*1000).toISOString()
         setHealersLoading(true)
-        const [rooms,allMembers,online,healerCount,featuredHealersResult,activeRooms,sessions,notifications,connections,activity,me,relations,myProfile]=await Promise.all([
+        const [rooms,allMembers,online,healerCount,featuredHealersResult,activeRooms,sessions,notifications,connections,activity,me,relations]=await Promise.all([
           supabase.from('rooms').select('id,name,description,icon,theme,is_private').eq('is_private',false).limit(6),
           supabase.from('profiles').select('id',{count:'exact',head:true}),
           supabase.from('profiles').select('id',{count:'exact',head:true}).gte('last_seen',fiveMinutesAgo),
-          supabase.from('profiles').select('id',{count:'exact',head:true}).in('profile_type',healerRoles).eq('professional_verification_status','approved').neq('visibility','private').eq('account_status','active').eq('discoverable',true),
+          supabase.from('profiles').select('id',{count:'exact',head:true}).eq('profile_type','healer').neq('visibility','private').eq('account_status','active').eq('discoverable',true),
           getFeaturedHealers(12).then(result=>({data:result,error:null as Error|null})).catch(error=>({data:{rows:[] as LiveProfile[],total:0},error:error as Error})),
           supabase.from('rooms').select('id',{count:'exact',head:true}).eq('is_private',false),
           supabase.from('sessions').select('id',{count:'exact',head:true}).gte('starts_at',new Date().toISOString()).in('status',['published','live','registration_closed']),
@@ -334,14 +333,11 @@ function App() {
           supabase.from('friendships').select('id',{count:'exact',head:true}).eq('addressee_id',session.user.id).eq('status','pending'),
           supabase.from('messages').select('id,body,created_at,profiles!messages_sender_id_fkey(full_name,avatar_url),rooms!messages_room_id_fkey(id,name)').order('created_at',{ascending:false}).limit(3),
           supabase.from('profiles').select('avatar_url').eq('id',session.user.id).single(),
-          supabase.from('friendships').select('id,requester_id,addressee_id,status').or(`requester_id.eq.${session.user.id},addressee_id.eq.${session.user.id}`).in('status',['pending','accepted']),
-          supabase.from('profiles').select('profile_type,professional_verification_status').eq('id',session.user.id).single()
+          supabase.from('friendships').select('id,requester_id,addressee_id,status').or(`requester_id.eq.${session.user.id},addressee_id.eq.${session.user.id}`).in('status',['pending','accepted'])
         ])
         const healerRows = (featuredHealersResult.data.rows||[]).map(profile => ({...profile,interests:null,visibility:'community',next_session:(profile as any).next_session_id?{id:(profile as any).next_session_id,title:(profile as any).next_session_title||'Upcoming session',starts_at:(profile as any).next_session_starts_at||new Date().toISOString(),host_id:profile.id}:null}))
         setDbRooms((rooms.data as DbRoom[])||[]);setLiveHealers(healerRows);setHealersError(featuredHealersResult.error?'We could not load healers right now. Please try again.':'');setHealersLoading(false);setRecentMessages((activity.data as unknown as RecentMessage[])||[]);setFriendships((relations.data as Friendship[])||[]);setCurrentAvatar(me.data?.avatar_url||null)
         setMetrics({members:allMembers.count||0,online:online.count||0,healers:healerCount.count||0,rooms:activeRooms.count||0,sessions:sessions.count||0,notifications:notifications.count||0,connections:connections.count||0})
-        const myProf=myProfile.data as {profile_type:string;professional_verification_status:string}|null
-        setIsHealer(Boolean(myProf && (healerRoles as string[]).includes(myProf.profile_type) && myProf.professional_verification_status === 'approved'))
       } catch {
         setHealersError('Unable to load data. Please refresh the page.')
         setHealersLoading(false)
@@ -376,7 +372,6 @@ function App() {
       setSelectedRoom(null);setFeature(null);setProfilePreview(null);setPodcastPlayer(null)
       setDbRooms([]);setLiveHealers([]);setRecentMessages([]);setFriendships([]);setCurrentAvatar(null)
       setMetrics({members:0,online:0,healers:0,rooms:0,sessions:0,notifications:0,connections:0})
-      setIsHealer(false)
       setMenuOpen(false);setShowAllRooms(false);setHealersError('');setActiveNav('Home')
       if (noticeTimer.current) { window.clearTimeout(noticeTimer.current); noticeTimer.current = null }
       setNotice('')
@@ -470,7 +465,7 @@ function App() {
           <button onClick={() => openFeature('sessions')}><CalendarDays size={16}/> Sessions</button>
           <button onClick={() => openFeature('ai')}><Bot size={16}/> AI Companion</button>
           <button onClick={() => openFeature('messages')}><MessageCircleMore size={16}/> Private rooms</button>
-          {isHealer && <>
+          {canCreateContent && <>
             <button className="healer-action" onClick={() => openPodcast('manage')}><Mic size={16}/> Podcast Studio</button>
             <button className="healer-action" onClick={() => openFeature('sessions')}><Video size={16}/> Host a session</button>
           </>}
@@ -535,12 +530,12 @@ function App() {
     {feature==='connections' && <Connections userId={session.user.id} onClose={closeOverlay} onOpenRoom={openRoom}/>} 
     {feature==='messages' && <PrivateChats onClose={closeOverlay} onOpenRoom={openRoom}/>} 
     {feature==='ai' && <AICompanion userId={session.user.id} onClose={closeOverlay}/>} 
-    {feature==='podcasts' && <PodcastPlatform userId={session.user.id} podcastId={route.podcastId} episodeId={route.episodeId} studio={route.podcastStudio} onClose={closeOverlay} onOpenPodcast={openPodcast} onOpenEpisode={openPodcastEpisode} onOpenProfile={openProfile} onPlayEpisode={setPodcastPlayer}/>} 
+    {feature==='podcasts' && <PodcastPlatform userId={session.user.id} isHealer={canCreateContent} podcastId={route.podcastId} episodeId={route.episodeId} studio={route.podcastStudio} onClose={closeOverlay} onOpenPodcast={openPodcast} onOpenEpisode={openPodcastEpisode} onOpenProfile={openProfile} onPlayEpisode={setPodcastPlayer}/>} 
     {feature==='profile' && <EditProfile userId={session.user.id} onClose={closeOverlay}/>} 
-    {feature==='sessions' && <SessionsPage userId={session.user.id} isHealer={isHealer} onClose={closeOverlay}/>} 
+    {feature==='sessions' && <SessionsPage userId={session.user.id} isHealer={canCreateContent} onClose={closeOverlay}/>} 
     {feature==='notifications' && <Notifications userId={session.user.id} onClose={closeOverlay}/>} 
     {feature==='safety' && <SafetyCenter onClose={closeOverlay}/>} 
-    {profilePreview && <div className="feature-overlay"><section className="profile-window public-profile-window"><header><div><h2>{profileName(profilePreview)}</h2><p>{roleLabel(profilePreview)}{profilePreview.country?` · ${profilePreview.country}`:''}</p></div><button onClick={closeOverlay}><X/></button></header><div className="public-profile-body"><span className="avatar healer rose public-profile-avatar">{profilePreview.avatar_url?<img src={profilePreview.avatar_url} alt={`${profileName(profilePreview)} profile photo`} loading="lazy"/>:profileInitials(profileName(profilePreview))}<i className={profilePreview.online?'online':''}/></span><p>{profilePreview.about||'This member has not added an introduction yet.'}</p><div className="healer-tags">{[...(approvedProfessional(profilePreview)?profilePreview.specialties||[]:[]),...(profilePreview.interests||[])].slice(0,6).map(tag=><span key={tag}>{tag}</span>)}</div><ProfilePreviewActions profile={profilePreview} friendships={friendships} userId={session.user.id} onConnect={connectWith} onMessage={startPrivateMessage} onSessions={()=>openFeature('sessions')} onCreatePodcast={()=>openPodcast('manage')} onCreateSession={()=>openFeature('sessions')}/></div></section></div>}
+    {profilePreview && <div className="feature-overlay"><section className="profile-window public-profile-window"><header><div><h2>{profileName(profilePreview)}</h2><p>{roleLabel(profilePreview)}{profilePreview.country?` · ${profilePreview.country}`:''}</p></div><button onClick={closeOverlay}><X/></button></header><div className="public-profile-body"><span className="avatar healer rose public-profile-avatar">{profilePreview.avatar_url?<img src={profilePreview.avatar_url} alt={`${profileName(profilePreview)} profile photo`} loading="lazy"/>:profileInitials(profileName(profilePreview))}<i className={profilePreview.online?'online':''}/></span><p>{profilePreview.about||'This member has not added an introduction yet.'}</p><div className="healer-tags">{[...(profilePreview.profile_type==='healer'?profilePreview.specialties||[]:[]),...(profilePreview.interests||[])].slice(0,6).map(tag=><span key={tag}>{tag}</span>)}</div><ProfilePreviewActions profile={profilePreview} friendships={friendships} userId={session.user.id} onConnect={connectWith} onMessage={startPrivateMessage} onSessions={()=>openFeature('sessions')} onCreatePodcast={()=>openPodcast('manage')} onCreateSession={()=>openFeature('sessions')}/></div></section></div>}
     {profilePreview && <div className="profile-podcast-sidecar"><ProfilePodcastSection profileId={profilePreview.id} onOpenPodcast={openPodcast}/></div>}
     <PodcastMiniPlayer episode={podcastPlayer} onClose={() => setPodcastPlayer(null)}/>
     {notice && <div className="toast"><ShieldCheck size={17}/>{notice}</div>}

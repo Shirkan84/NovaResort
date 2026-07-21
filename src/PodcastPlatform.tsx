@@ -275,7 +275,7 @@ function PodcastStudio({ userId }: { userId: string }) {
 
   const loadCreatorStatus = useCallback(async () => {
     const [{ data: eligible }, { data: profile }] = await Promise.all([
-      supabase.rpc('is_approved_podcast_creator', { check_user: userId }),
+      supabase.rpc('can_create_content', { check_user: userId }),
       supabase.from('profiles').select('display_name,full_name,profile_type,professional_verification_status').eq('id', userId).single()
     ])
     setCreatorStatus({ eligible: Boolean(eligible), ...(profile as any) })
@@ -501,7 +501,7 @@ function PodcastStudio({ userId }: { userId: string }) {
   }
 
   if (!creatorStatus) return <div className="empty-state">Checking creator status...</div>
-  if (!creatorStatus.eligible) return <div className="podcast-studio-denied"><ShieldAlert /><h3>Podcast Studio is for approved professionals</h3><p>Your profile must be an approved healer, therapist, coach, mindfulness teacher, wellness professional, or community facilitator before creator controls are available.</p><small>Current status: {creatorStatus.profile_type || 'member'} / {creatorStatus.professional_verification_status || 'unverified'}</small></div>
+  if (!creatorStatus.eligible) return <div className="podcast-studio-denied"><ShieldAlert /><h3>Podcast Studio is for healers</h3><p>Only healer accounts can create and manage podcasts.</p><small>Current account type: {creatorStatus.profile_type || 'member'}</small></div>
 
   return <div className="podcast-studio">
     {message && <p className="studio-message">{message}</p>}
@@ -752,8 +752,8 @@ function EpisodeEditForm({ podcast, episodeId, userId, uploadCoverImage, onBack,
   </>
 }
 
-export function PodcastPlatform({ userId, podcastId, episodeId, studio, onClose, onOpenPodcast, onOpenEpisode, onOpenProfile, onPlayEpisode }: {
-  userId: string; podcastId?: string | null; episodeId?: string | null; studio?: boolean; onClose: () => void;
+export function PodcastPlatform({ userId, isHealer, podcastId, episodeId, studio, onClose, onOpenPodcast, onOpenEpisode, onOpenProfile, onPlayEpisode }: {
+  userId: string; isHealer?: boolean; podcastId?: string | null; episodeId?: string | null; studio?: boolean; onClose: () => void;
   onOpenPodcast: (id: string) => void; onOpenEpisode: (podcastId: string, episodeId: string) => void;
   onOpenProfile: (id: string) => void; onPlayEpisode: (episode: PlayerEpisode) => void
 }) {
@@ -812,13 +812,15 @@ export function PodcastPlatform({ userId, podcastId, episodeId, studio, onClose,
 
   return <div className="feature-overlay"><section className="directory-window podcasts-window">
     <header>
-      <div><h2>{studio ? 'Podcast Studio' : selected ? 'Podcast' : 'Podcasts'}</h2><p>{studio ? 'Create, record, upload, and manage healer-only podcast content.' : 'Discover real wellness audio from approved Nova Resort professionals.'}</p></div>
-      {!studio && !selected && <button style={{ width: 'auto', padding: '0 12px' }} onClick={() => onOpenPodcast('manage')}>Podcast Studio</button>}
+      <div><h2>{studio ? 'Podcast Studio' : selected ? 'Podcast' : 'Podcasts'}</h2><p>{studio ? 'Create, record, upload, and manage your podcast content.' : 'Discover real wellness audio from Nova Resort professionals.'}</p></div>
+      {!studio && !selected && isHealer && <button className="healer-create-action" style={{ width: 'auto', padding: '0 12px' }} onClick={() => onOpenPodcast('manage')}><Mic size={14} /> Create Podcast</button>}
+      {!studio && !selected && !isHealer && <button style={{ width: 'auto', padding: '0 12px' }} onClick={() => onOpenPodcast('manage')}>Podcast Studio</button>}
       <button onClick={onClose}><X /></button>
     </header>
 
     {studio ? <PodcastStudio userId={userId} /> : selected ? <div className="podcast-detail-view">
       <button className="back-link" onClick={() => onOpenPodcast('')}><ChevronLeft size={14} /> All podcasts</button>
+      {selected.creator_id === userId && <div className="podcast-owner-actions"><button onClick={() => onOpenPodcast('manage')}><Mic size={14} /> Manage in Studio</button></div>}
       <section className="podcast-hero">
         <Cover src={selected.cover_image_url} title={selected.title} />
         <div>

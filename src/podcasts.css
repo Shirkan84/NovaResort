@@ -262,6 +262,13 @@
 .podcast-studio-denied p{font-size:12px;color:var(--muted);line-height:1.6;max-width:400px;margin:0}
 .podcast-studio-denied small{font-size:9px;color:var(--muted);padding:6px 12px;background:var(--page);border-radius:8px;border:1px solid var(--line)}
 
+/* ── Podcast Owner Actions ── */
+.podcast-owner-actions{display:flex;gap:8px;margin-bottom:12px}
+.podcast-owner-actions button{display:inline-flex;align-items:center;gap:6px;height:34px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--deep);font:600 11px DM Sans,sans-serif;padding:0 14px;cursor:pointer;transition:background .15s}
+.podcast-owner-actions button:hover{background:var(--page);border-color:#526f62}
+.dark .podcast-owner-actions button{background:#253229;border-color:#334039;color:#dce9e2}
+.dark .podcast-owner-actions button:hover{background:#2f3f36}
+
 /* ── Upload Progress ── */
 .upload-progress{width:100%;height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin:8px 0}
 .upload-progress>div{height:100%;background:#526f62;border-radius:3px;transition:width .3s ease}

@@ -31,10 +31,10 @@ export type MemberFilters = {
 }
 
 const publicProfileFields = 'id,full_name,display_name,avatar_url,country,city,profile_type,professional_title,professional_verification_status,about,interests,specialties,languages,online,last_seen,created_at'
-const approvedProfessional = (member:PublicMember) => member.professional_verification_status === 'approved' && ['healer','therapist','coach','mindfulness_teacher','wellness_professional'].includes(member.profile_type)
+const approvedProfessional = (member:PublicMember) => member.profile_type === 'healer'
 
 export function publicAccountLabel(member:PublicMember) {
-  return approvedProfessional(member) ? 'Healer' : 'Regular Member'
+  return approvedProfessional(member) ? 'Healer' : 'Member'
 }
 
 export function isApprovedHealer(member:PublicMember) {
@@ -57,14 +57,14 @@ export async function searchMembers(filters:MemberFilters = {}) {
   if (filters.language && filters.language !== 'all') query = query.contains('languages', [filters.language])
   if (filters.specialty && filters.specialty !== 'all') query = query.contains('specialties', [filters.specialty])
   if (filters.memberType === 'healers') {
-    query = query.eq('professional_verification_status','approved').in('profile_type',['healer','therapist','coach','mindfulness_teacher','wellness_professional'])
+    query = query.eq('profile_type','healer')
   } else if (filters.memberType === 'regular') {
-    query = query.not('professional_verification_status','eq','approved')
+    query = query.neq('profile_type','healer')
   }
 
   if (filters.sort === 'name') query = query.order('display_name', { ascending:true, nullsFirst:false }).order('full_name', { ascending:true })
   else if (filters.sort === 'recently_active') query = query.order('online', { ascending:false }).order('last_seen', { ascending:false })
-  else if (filters.sort === 'healers_first') query = query.order('professional_verification_status', { ascending:true }).order('updated_at', { ascending:false })
+  else if (filters.sort === 'healers_first') query = query.order('profile_type', { ascending:false }).order('updated_at', { ascending:false })
   else query = query.order('created_at', { ascending:false })
 
   const { data, error, count } = await query.range(offset, offset + limit - 1)

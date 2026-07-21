@@ -1,6 +1,6 @@
 import { supabase } from '../supabase'
 
-export const PROFESSIONAL_ROLES = ['healer','therapist','coach','mindfulness_teacher','wellness_professional'] as const
+export const PROFESSIONAL_ROLES = ['healer'] as const
 
 export type PublicHealer = {
   id:string; full_name:string; display_name:string|null; avatar_url:string|null; country:string|null;
