@@ -82,19 +82,19 @@ AS $$
   SELECT public.can_create_content(check_user);
 $$;
 
--- Update profile_is_approved_professional to match
+-- Update profile_is_approved_professional to match (keep original param names for CREATE OR REPLACE)
 CREATE OR REPLACE FUNCTION public.profile_is_approved_professional(
-  pt text,
-  vs text,
-  ast text DEFAULT 'active'
+  profile_type text,
+  verification_status text,
+  account_status text default 'active'
 )
 RETURNS boolean
 LANGUAGE sql
 STABLE
 SET search_path = public
 AS $$
-  SELECT COALESCE(ast, 'active') = 'active'
-    AND pt IN ('healer', 'admin');
+  SELECT COALESCE(account_status, 'active') = 'active'
+    AND profile_type IN ('healer', 'admin');
 $$;
 
 -- Revoke and grant
