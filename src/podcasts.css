@@ -366,15 +366,63 @@
 .current-audio small{font-size:9px;color:var(--muted)}
 .current-audio audio{width:100%;border-radius:8px;height:36px}
 
-/* ── Recording Panel ── */
-.recording-panel{display:flex;flex-direction:column;gap:10px}
-.recording-panel h4{font:700 11px Manrope,sans-serif;margin:0;color:var(--deep);display:flex;align-items:center;gap:5px}
-.recording-controls{display:flex;gap:8px;align-items:center}
-.recording-controls button{height:42px;border:0;border-radius:10px;display:flex;align-items:center;justify-content:center;gap:7px;font:800 11px Manrope,sans-serif;cursor:pointer;transition:background .12s ease}
-.recording-controls button:first-child{background:#cf685f;color:white}
-.recording-controls button:first-child:hover{background:#b8574e}
-.recording-controls audio{width:100%;border-radius:8px;height:38px}
-.recording-panel small{font-size:9px;color:var(--muted);line-height:1.5}
+/* ── Recording Section ── */
+.record-section{border:1px solid var(--line);border-radius:14px;padding:16px;background:color-mix(in srgb,var(--card) 88%,var(--page))}
+.record-section h4{font:700 12px Manrope,sans-serif;margin:0 0 6px;color:var(--deep);display:flex;align-items:center;gap:5px}
+.record-hint{font-size:10px;color:var(--muted);margin:0 0 12px;line-height:1.5}
+.record-buttons{display:flex;gap:8px;flex-wrap:wrap}
+.record-btn{height:42px;border:0;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;gap:7px;font:800 11px Manrope,sans-serif;cursor:pointer;transition:all .12s ease;padding:0 16px;color:white}
+.record-btn.audio{background:#cf685f}
+.record-btn.audio:hover{background:#b8574e}
+.record-btn.video{background:#557567}
+.record-btn.video:hover{background:#476457}
+.record-btn.upload{background:var(--page);color:var(--muted);border:1px solid var(--line);position:relative;overflow:hidden}
+.record-btn.upload input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.record-btn.upload:hover{background:#eef4ef;color:var(--deep);border-color:#526f62}
+
+/* ── Active Recording ── */
+.record-active{border:2px solid #cf685f;border-radius:14px;padding:16px;background:#fef5f4;display:flex;flex-direction:column;align-items:center;gap:10px}
+.record-active.video{border-color:#557567;background:#edf4ef}
+.record-indicator{display:flex;align-items:center;gap:8px;font:700 12px Manrope,sans-serif;color:#8a4c46}
+.record-active.video .record-indicator{color:#3d6150}
+.pulse-dot{width:10px;height:10px;border-radius:50%;background:#cf685f;animation:pulse 1s infinite}
+.record-active.video .pulse-dot{background:#557567}
+.record-timer{font:700 28px/1 monospace;color:var(--deep)}
+.record-video-preview{width:100%;max-height:200px;border-radius:10px;background:#000}
+.record-audio-preview{width:100%;border-radius:8px;height:40px}
+.record-controls{display:flex;gap:8px}
+.record-controls button{height:38px;border:0;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;gap:6px;font:700 11px Manrope,sans-serif;cursor:pointer;padding:0 14px;transition:background .12s}
+.record-controls button{background:var(--page);color:var(--muted);border:1px solid var(--line)}
+.record-controls button:hover{background:#eef4ef;color:var(--deep)}
+.record-controls button.stop{background:#cf685f;color:white;border-color:#cf685f}
+.record-controls button.stop:hover{background:#b8574e}
+.record-controls button.cancel{color:#cf685f;border-color:#f0d4cf}
+.record-controls button.cancel:hover{background:#fef5f4}
+
+/* ── Recording Preview ── */
+.record-preview{border:1px solid var(--line);border-radius:14px;padding:16px;background:color-mix(in srgb,var(--card) 88%,var(--page));display:flex;flex-direction:column;gap:10px}
+.record-preview h4{font:700 12px Manrope,sans-serif;margin:0;color:var(--deep)}
+.record-preview-actions{display:flex;gap:8px}
+.record-preview-actions button{height:38px;border:0;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;gap:6px;font:700 11px Manrope,sans-serif;cursor:pointer;padding:0 14px;transition:background .12s}
+.record-preview-actions button{background:#557567;color:white}
+.record-preview-actions button:hover{background:#476457}
+.record-preview-actions button.cancel{background:transparent;color:var(--muted);border:1px solid var(--line)}
+.record-preview-actions button.cancel:hover{background:#fef5f4;color:#cf685f;border-color:#f0d4cf}
+
+/* ── Selected File ── */
+.selected-file{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:var(--page)}
+.selected-file-info{display:flex;align-items:center;gap:10px;min-width:0}
+.selected-file-info svg{color:var(--green);flex-shrink:0}
+.selected-file-info span{display:flex;flex-direction:column;gap:1px;min-width:0}
+.selected-file-info b{font-size:11px;color:var(--deep);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.selected-file-info small{font-size:9px;color:var(--muted)}
+.selected-file button{flex-shrink:0}
+
+/* ── Episode Submit Row ── */
+.episode-submit-row{display:flex;gap:8px}
+.episode-submit-row button{flex:1}
+.episode-submit-row .publish-btn{background:#557567}
+.episode-submit-row .publish-btn:hover{background:#476457}
 
 /* ── Studio Message ── */
 .studio-message{font-size:11px;line-height:1.5;padding:10px 14px;border-radius:10px;margin:10px 0 0;background:#edf4ef;color:#3d6150;border:1px solid #d2e5d7}
@@ -672,3 +720,27 @@
 .dark .transcript-details{border-color:#334039}
 .dark .transcript-details summary{background:#253229;color:#dce9e2}
 .dark .transcript-details p{color:#9caaa2}
+
+/* ── Dark: Recording ── */
+.dark .record-section{background:#1b2420;border-color:#34433b}
+.dark .record-section h4{color:#dce9e2}
+.dark .record-hint{color:#9caaa2}
+.dark .record-btn.upload{background:#253229;border-color:#334039;color:#9caaa2}
+.dark .record-btn.upload:hover{background:#2f3f36;color:#dce9e2;border-color:#93b2a2}
+.dark .record-active{background:#1a1f1e;border-color:#55393a}
+.dark .record-active.video{border-color:#34433b;background:#1b2420}
+.dark .record-indicator{color:#d9a09a}
+.dark .record-active.video .record-indicator{color:#93b2a2}
+.dark .record-controls button{background:#253229;border-color:#334039;color:#9caaa2}
+.dark .record-controls button:hover{background:#2f3f36;color:#dce9e2}
+.dark .record-controls button.cancel{color:#d9a09a;border-color:#55393a}
+.dark .record-controls button.cancel:hover{background:#2a1f1e;color:#d9a09a}
+.dark .record-preview{background:#1b2420;border-color:#34433b}
+.dark .record-preview h4{color:#dce9e2}
+.dark .record-preview-actions button.cancel{border-color:#334039;color:#9caaa2}
+.dark .record-preview-actions button.cancel:hover{background:#2a1f1e;color:#d9a09a}
+.dark .selected-file{background:#253229;border-color:#334039}
+.dark .selected-file-info b{color:#dce9e2}
+.dark .selected-file-info small{color:#9caaa2}
+.dark .episode-submit-row .publish-btn{background:#476457}
+.dark .episode-submit-row .publish-btn:hover{background:#3d5649}

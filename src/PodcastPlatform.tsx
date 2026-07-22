@@ -2,8 +2,8 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import {
   BadgeCheck, Bookmark, ChevronLeft, ChevronRight, Clock, Edit3, Eye, EyeOff,
   FileAudio, Headphones, Heart, List, Mic, Pause, Play, Plus, Radio, Search,
-  Send, Share2, ShieldAlert, SkipBack, SkipForward, Tag, Trash2, Upload,
-  Volume2, X
+  Send, Share2, ShieldAlert, SkipBack, SkipForward, Square, Tag, Trash2, Upload,
+  Video, Volume2, X
 } from 'lucide-react'
 import { supabase } from './supabase'
 import './podcasts.css'
@@ -37,11 +37,13 @@ type StudioEpisode = {
 const categories = ['all', 'Mindfulness', 'Meditation', 'Emotional Healing', 'Personal Coaching', 'Relationships', 'Stress Management', 'Anxiety Support', 'Self Growth', 'Breathwork', 'Sleep', 'Confidence', 'Parenting', 'Grief', 'Trauma Awareness', 'Wellness Education', 'Spiritual Growth', 'Motivation', 'Healthy Habits']
 const languages = ['all', 'English', 'Hebrew', 'Spanish', 'French', 'German', 'Portuguese', 'Arabic', 'Hindi', 'Japanese', 'Chinese']
 const speeds = [0.75, 1, 1.25, 1.5, 2]
-const AUDIO_TYPES = ['audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/x-m4a']
+const AUDIO_TYPES = ['audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/x-m4a', 'audio/webm', 'audio/ogg', 'audio/wav']
+const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime']
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_AUDIO = 100 * 1024 * 1024
+const MAX_VIDEO = 500 * 1024 * 1024
 const MAX_IMAGE = 5 * 1024 * 1024
-const MAX_DURATION = 1200
+const MAX_DURATION = 3600
 const SIGNED_URL_EXPIRY = 31536000
 
 const initials = (name?: string | null) => (name || 'N').split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase()
@@ -283,14 +285,10 @@ function PodcastStudio({ userId, initialAction = 'list', initialPodcastId, initi
   const [episodesLoading, setEpisodesLoading] = useState(false)
   const [editingEpisodeId, setEditingEpisodeId] = useState<string | null>(null)
   const [episodeFilter, setEpisodeFilter] = useState<'all' | 'draft' | 'published'>('all')
-  const [recording, setRecording] = useState(false)
-  const [recordedUrl, setRecordedUrl] = useState('')
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [coverPreview, setCoverPreview] = useState<string | null>(null)
   const [storageBytes, setStorageBytes] = useState<number>(0)
   const [podcastStats, setPodcastStats] = useState<Record<string, { plays: number; followers: number; episodes: number }>>({})
-  const recorderRef = useRef<MediaRecorder | null>(null)
-  const chunksRef = useRef<Blob[]>([])
 
   const loadCreatorStatus = useCallback(async () => {
     const [{ data: eligible }, { data: profile }] = await Promise.all([
@@ -388,7 +386,7 @@ function PodcastStudio({ userId, initialAction = 'list', initialPodcastId, initi
   }
 
   async function uploadAudioFile(file: File): Promise<{ path: string; url: string; duration: number } | null> {
-    if (!AUDIO_TYPES.includes(file.type)) { showMsg('Unsupported audio type. Use MP3, M4A, or AAC.'); return null }
+    if (!AUDIO_TYPES.includes(file.type)) { showMsg('Unsupported audio type. Supported: MP3, M4A, AAC, WebM, OGG, WAV.'); return null }
     if (file.size > MAX_AUDIO) { showMsg('Audio must be under 100MB.'); return null }
     const audioDuration = await new Promise<number>(resolve => {
       const a = new Audio()
@@ -396,17 +394,36 @@ function PodcastStudio({ userId, initialAction = 'list', initialPodcastId, initi
       a.onloadedmetadata = () => { resolve(Math.floor(a.duration || 0)); URL.revokeObjectURL(a.src) }
       a.onerror = () => { resolve(0); URL.revokeObjectURL(a.src) }
     })
-    if (audioDuration > MAX_DURATION) { showMsg(`Episode duration is ${duration(audioDuration)}. Maximum allowed is 20 minutes.`); return null }
+    if (audioDuration > MAX_DURATION) { showMsg(`Episode duration is ${duration(audioDuration)}. Maximum allowed is 60 minutes.`); return null }
     const path = `${userId}/${crypto.randomUUID()}-${safeFileName(file.name)}`
     setUploadProgress(0)
-    const { error } = await supabase.storage.from('podcast-audio').upload(path, file, {
-      contentType: file.type
-    })
+    const { error } = await supabase.storage.from('podcast-audio').upload(path, file, { contentType: file.type })
     setUploadProgress(null)
     if (error) { showMsg(error.message); return null }
     const { data: urlData } = await supabase.storage.from('podcast-audio').createSignedUrl(path, SIGNED_URL_EXPIRY)
     if (!urlData?.signedUrl) { showMsg('Failed to get audio URL.'); return null }
     return { path, url: urlData.signedUrl, duration: audioDuration }
+  }
+
+  async function uploadVideoFile(file: File): Promise<{ path: string; url: string; duration: number } | null> {
+    if (!VIDEO_TYPES.includes(file.type)) { showMsg('Unsupported video type. Supported: MP4, WebM, MOV.'); return null }
+    if (file.size > MAX_VIDEO) { showMsg('Video must be under 500MB.'); return null }
+    const videoDuration = await new Promise<number>(resolve => {
+      const v = document.createElement('video')
+      v.preload = 'metadata'
+      v.src = URL.createObjectURL(file)
+      v.onloadedmetadata = () => { resolve(Math.floor(v.duration || 0)); URL.revokeObjectURL(v.src) }
+      v.onerror = () => { resolve(0); URL.revokeObjectURL(v.src) }
+    })
+    if (videoDuration > MAX_DURATION) { showMsg(`Episode duration is ${duration(videoDuration)}. Maximum allowed is 60 minutes.`); return null }
+    const path = `${userId}/${crypto.randomUUID()}-${safeFileName(file.name)}`
+    setUploadProgress(0)
+    const { error } = await supabase.storage.from('podcast-video').upload(path, file, { contentType: file.type })
+    setUploadProgress(null)
+    if (error) { showMsg(error.message); return null }
+    const { data: urlData } = await supabase.storage.from('podcast-video').createSignedUrl(path, SIGNED_URL_EXPIRY)
+    if (!urlData?.signedUrl) { showMsg('Failed to get video URL.'); return null }
+    return { path, url: urlData.signedUrl, duration: videoDuration }
   }
 
   async function createPodcast(event: FormEvent<HTMLFormElement>) {
@@ -487,9 +504,22 @@ function PodcastStudio({ userId, initialAction = 'list', initialPodcastId, initi
     const form = new FormData(event.currentTarget)
     const title = String(form.get('title') || '')
     const audioFile = form.get('audio_file') as File | null
-    if (!audioFile || audioFile.size === 0) { showMsg('Please select an audio file to upload.'); return }
-    const audioResult = await uploadAudioFile(audioFile)
-    if (!audioResult) return
+    const videoFile = form.get('video_file') as File | null
+    const isVideo = Boolean(videoFile && videoFile.size > 0)
+    let audio_path: string | null = null, audio_url: string | null = null, audio_duration = 0
+    let video_path: string | null = null, video_url: string | null = null, media_kind = 'audio'
+    let media_mime_type: string | null = null, media_size_bytes: number | null = null
+    if (isVideo) {
+      const videoResult = await uploadVideoFile(videoFile!)
+      if (!videoResult) return
+      video_path = videoResult.path; video_url = videoResult.url; audio_duration = videoResult.duration
+      media_kind = 'video'; media_mime_type = videoFile!.type; media_size_bytes = videoFile!.size
+    } else if (audioFile && audioFile.size > 0) {
+      const audioResult = await uploadAudioFile(audioFile)
+      if (!audioResult) return
+      audio_path = audioResult.path; audio_url = audioResult.url; audio_duration = audioResult.duration
+      media_mime_type = audioFile.type; media_size_bytes = audioFile.size
+    }
     const coverFile = form.get('cover_image') as File | null
     let cover_url: string | null = null, cover_path: string | null = null
     if (coverFile && coverFile.size > 0) {
@@ -503,8 +533,8 @@ function PodcastStudio({ userId, initialAction = 'list', initialPodcastId, initi
       show_notes: String(form.get('show_notes') || ''),
       season_number: form.get('season_number') ? Number(form.get('season_number')) : null,
       episode_number: Number(form.get('episode_number') || 1),
-      audio_path: audioResult.path, audio_url: audioResult.url,
-      audio_duration_seconds: audioResult.duration,
+      audio_path, audio_url, audio_duration_seconds: audio_duration,
+      video_path, video_url, media_kind, media_mime_type, media_size_bytes,
       cover_image_url: cover_url, cover_path,
       transcript: String(form.get('transcript') || '') || null,
       content_warning: String(form.get('content_warning') || '') || null,
@@ -535,11 +565,12 @@ function PodcastStudio({ userId, initialAction = 'list', initialPodcastId, initi
     navigateStudio('episodes', selectedPodcast)
   }
 
-
-
   async function togglePublishEpisode(ep: StudioEpisode) {
     const newStatus = ep.status === 'published' ? 'draft' : 'published'
-    if (newStatus === 'published' && !window.confirm(`Publish episode "${ep.title}"? It will become publicly available.`)) return
+    if (newStatus === 'published') {
+      if (!ep.audio_url && !(ep as any).video_url) { showMsg('Cannot publish: episode has no media file. Upload audio or video first.'); return }
+      if (!window.confirm(`Publish episode "${ep.title}"? It will become publicly available.`)) return
+    }
     if (newStatus === 'draft' && !window.confirm(`Unpublish episode "${ep.title}"? It will be hidden from listeners.`)) return
     const { error } = await supabase.from('podcast_episodes').update({
       status: newStatus, published_at: newStatus === 'published' ? new Date().toISOString() : null, updated_at: new Date().toISOString()
@@ -555,29 +586,6 @@ function PodcastStudio({ userId, initialAction = 'list', initialPodcastId, initi
     if (error) { showMsg(error.message); return }
     showMsg('Episode deleted.')
     if (selectedPodcast) loadEpisodes(selectedPodcast.id)
-  }
-
-  function startRecording() {
-    if (!navigator.mediaDevices || !window.MediaRecorder) { showMsg('Browser recording is not supported.'); return }
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-      chunksRef.current = []
-      recorderRef.current = new MediaRecorder(stream)
-      recorderRef.current.ondataavailable = e => chunksRef.current.push(e.data)
-      recorderRef.current.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
-        setRecordedUrl(URL.createObjectURL(blob))
-        stream.getTracks().forEach(track => track.stop())
-      }
-      recorderRef.current.start()
-      setRecording(true)
-      showMsg('Recording started...')
-    }).catch(() => showMsg('Microphone permission denied.'))
-  }
-
-  function stopRecording() {
-    recorderRef.current?.stop()
-    setRecording(false)
-    showMsg('Recording stopped. Preview it, then upload the file from your device.')
   }
 
   if (!creatorStatus) return <div className="empty-state">Checking creator status...</div>
@@ -674,10 +682,11 @@ function PodcastStudio({ userId, initialAction = 'list', initialPodcastId, initi
       </div>
       {episodesLoading ? <div className="empty-state">Loading episodes...</div> : episodes.length === 0 ? <div className="empty-state"><Radio /><h3>No episodes yet</h3><p>Create your first episode to start sharing audio content.</p></div> : <div className="studio-list">{episodes.filter(ep => episodeFilter === 'all' || ep.status === episodeFilter).map(ep => <article key={ep.id} className="studio-episode-card">
         <div className="studio-episode-info">
-          <div className="episode-meta-line"><span>E{ep.episode_number}</span>{ep.season_number != null && <span>S{ep.season_number}</span>}<span>{duration(ep.audio_duration_seconds)}</span><span className={`status-badge ${ep.status}`}>{ep.status}</span></div>
+          <div className="episode-meta-line"><span>E{ep.episode_number}</span>{ep.season_number != null && <span>S{ep.season_number}</span>}<span>{duration(ep.audio_duration_seconds)}</span><span className={`status-badge ${ep.status}`}>{ep.status}</span>{(ep as any).media_kind === 'video' && <span><Video size={10} /> Video</span>}</div>
           <b>{ep.title}</b>
           <small>{ep.description ? ep.description.slice(0, 100) + (ep.description.length > 100 ? '...' : '') : 'No description'}</small>
           {ep.audio_url && <audio controls src={ep.audio_url} preload="none" style={{ height: 32, marginTop: 6 }} />}
+          {(ep as any).video_url && <video controls src={(ep as any).video_url} preload="none" style={{ width: '100%', maxHeight: 120, borderRadius: 8, marginTop: 6 }} />}
         </div>
         <div className="studio-episode-actions">
           <button onClick={() => navigateStudio('edit-episode', selectedPodcast, ep.id)}><Edit3 size={14} /> Edit</button>
@@ -687,37 +696,11 @@ function PodcastStudio({ userId, initialAction = 'list', initialPodcastId, initi
       </article>)}</div>}
     </>}
 
-    {studioView === 'create-episode' && selectedPodcast && <>
-      <div className="studio-section-header">
-        <h3>Create Episode — {selectedPodcast.title}</h3>
-        <button onClick={() => navigateStudio('episodes', selectedPodcast)}><ChevronLeft size={14} /> Back</button>
-      </div>
-      <form onSubmit={createEpisode} className="podcast-form">
-        <label>Title<input name="title" required minLength={3} maxLength={160} placeholder="Episode title" /></label>
-        <div className="form-row">
-          <label>Season number<input name="season_number" type="number" min="1" placeholder="Optional" /></label>
-          <label>Episode number<input name="episode_number" type="number" min="1" defaultValue="1" required /></label>
-        </div>
-        <label>Description<textarea name="description" maxLength={8000} placeholder="Episode description" /></label>
-        <label>Show notes<small>Optional detailed notes for this episode.</small><textarea name="show_notes" maxLength={10000} placeholder="Detailed show notes (optional)" /></label>
-        <label>Audio file<small>Required. Max 100MB, max 20 minutes. MP3, M4A, or AAC.</small><input type="file" name="audio_file" accept="audio/mpeg,audio/mp4,audio/aac,audio/x-m4a" required /></label>
-        <label>Cover image<small>Optional. Leave empty to use podcast cover.</small>
-          <div className="cover-upload">{coverPreview ? <img src={coverPreview} alt="Cover preview" /> : <div className="cover-placeholder"><Upload size={20} /> Click to upload cover</div>}
-            <input type="file" name="cover_image" accept="image/jpeg,image/png,image/webp" onChange={e => { const f = e.target.files?.[0]; if (f) setCoverPreview(URL.createObjectURL(f)) }} />
-          </div>
-        </label>
-        <label>Transcript<textarea name="transcript" maxLength={50000} placeholder="Optional transcript for accessibility" /></label>
-        <label>Tags<input name="tags" placeholder="Comma-separated tags" /></label>
-        <label>Content warning<input name="content_warning" placeholder="Optional content warning" /></label>
-        <div className="form-row">
-          <label>Visibility<select name="visibility"><option value="public">Public</option><option value="connections">Connections only</option><option value="group">Selected group</option><option value="private">Private draft</option></select></label>
-          <label className="check-label"><input type="checkbox" name="comments_enabled" defaultChecked /> Enable comments</label>
-          <label className="check-label"><input type="checkbox" name="reactions_enabled" defaultChecked /> Enable reactions</label>
-          <label className="check-label"><input type="checkbox" name="explicit_content" /> Explicit content</label>
-        </div>
-        <button><Upload size={14} /> Upload and save draft</button>
-      </form>
-    </>}
+    {studioView === 'create-episode' && selectedPodcast && <EpisodeCreateForm
+      podcast={selectedPodcast} userId={userId} uploadAudioFile={uploadAudioFile} uploadVideoFile={uploadVideoFile} uploadCoverImage={uploadCoverImage}
+      onBack={() => navigateStudio('episodes', selectedPodcast)} onSaved={() => { loadEpisodes(selectedPodcast.id); navigateStudio('episodes', selectedPodcast) }}
+      showMsg={showMsg}
+    />}
 
     {studioView === 'edit-episode' && selectedPodcast && editingEpisodeId && <EpisodeEditForm
       podcast={selectedPodcast} episodeId={editingEpisodeId} userId={userId} uploadCoverImage={uploadCoverImage}
@@ -725,16 +708,265 @@ function PodcastStudio({ userId, initialAction = 'list', initialPodcastId, initi
       onSaved={() => { loadEpisodes(selectedPodcast.id); navigateStudio('episodes', selectedPodcast) }}
       showMsg={showMsg}
     />}
-
-    <section className="recording-panel">
-      <h4><Mic size={14} /> Quick Record</h4>
-      <div className="recording-controls">
-        <button onClick={recording ? stopRecording : startRecording}>{recording ? <><Pause /> Stop recording</> : <><Mic /> Start recording</>}</button>
-        {recordedUrl && <audio controls src={recordedUrl} />}
-      </div>
-      <small>Record audio in your browser. Download the recording, then upload it as an episode audio file.</small>
-    </section>
   </div>
+}
+
+function EpisodeCreateForm({ podcast, userId, uploadAudioFile, uploadVideoFile, uploadCoverImage, onBack, onSaved, showMsg }: {
+  podcast: Podcast; userId: string;
+  uploadAudioFile: (file: File) => Promise<{ path: string; url: string; duration: number } | null>;
+  uploadVideoFile: (file: File) => Promise<{ path: string; url: string; duration: number } | null>;
+  uploadCoverImage: (file: File) => Promise<{ path: string; url: string } | null>;
+  onBack: () => void; onSaved: () => void; showMsg: (msg: string) => void
+}) {
+  const [coverPreview, setCoverPreview] = useState<string | null>(null)
+  const [recordingMode, setRecordingMode] = useState<'idle' | 'audio' | 'video'>('idle')
+  const [recordingState, setRecordingState] = useState<'idle' | 'recording' | 'paused' | 'preview'>('idle')
+  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null)
+  const [recordedUrl, setRecordedUrl] = useState('')
+  const [recordingDuration, setRecordingDuration] = useState(0)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [selectedFileType, setSelectedFileType] = useState<'audio' | 'video' | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const streamRef = useRef<MediaStream | null>(null)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const videoPreviewRef = useRef<HTMLVideoElement | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
+      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
+      if (recordedUrl) URL.revokeObjectURL(recordedUrl)
+    }
+  }, [recordedUrl])
+
+  function formatRecTimer(s: number) { const m = Math.floor(s / 60), sec = s % 60; return `${m}:${String(sec).padStart(2, '0')}` }
+
+  async function startRecording(mode: 'audio' | 'video') {
+    if (!navigator.mediaDevices || !window.MediaRecorder) { showMsg('Browser recording is not supported in this browser.'); return }
+    try {
+      const constraints: MediaStreamConstraints = mode === 'video'
+        ? { video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }, audio: true }
+        : { audio: true }
+      const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      streamRef.current = stream
+      if (mode === 'video' && videoPreviewRef.current) {
+        videoPreviewRef.current.srcObject = stream
+        videoPreviewRef.current.play()
+      }
+      const mimeType = mode === 'video'
+        ? (MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') ? 'video/webm;codecs=vp8,opus' : 'video/webm')
+        : (MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm')
+      chunksRef.current = []
+      const recorder = new MediaRecorder(stream, { mimeType })
+      mediaRecorderRef.current = recorder
+      recorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data) }
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: mimeType })
+        setRecordedBlob(blob)
+        setRecordedUrl(URL.createObjectURL(blob))
+        setRecordingState('preview')
+        stream.getTracks().forEach(t => t.stop())
+      }
+      recorder.start(200)
+      setRecordingMode(mode)
+      setRecordingState('recording')
+      setRecordingDuration(0)
+      timerRef.current = setInterval(() => setRecordingDuration(d => d + 1), 1000)
+    } catch (err: any) {
+      if (err?.name === 'NotAllowedError') showMsg(mode === 'video' ? 'Camera/microphone permission denied.' : 'Microphone permission denied.')
+      else showMsg('Could not start recording: ' + (err?.message || 'Unknown error'))
+    }
+  }
+
+  function pauseRecording() {
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.pause()
+      if (timerRef.current) clearInterval(timerRef.current)
+      setRecordingState('paused')
+    }
+  }
+
+  function resumeRecording() {
+    if (mediaRecorderRef.current?.state === 'paused') {
+      mediaRecorderRef.current.resume()
+      timerRef.current = setInterval(() => setRecordingDuration(d => d + 1), 1000)
+      setRecordingState('recording')
+    }
+  }
+
+  function stopRecording() {
+    if (timerRef.current) clearInterval(timerRef.current)
+    if (mediaRecorderRef.current?.state !== 'inactive') mediaRecorderRef.current?.stop()
+  }
+
+  function discardRecording() {
+    if (timerRef.current) clearInterval(timerRef.current)
+    if (mediaRecorderRef.current?.state !== 'inactive') mediaRecorderRef.current?.stop()
+    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
+    if (recordedUrl) URL.revokeObjectURL(recordedUrl)
+    setRecordedBlob(null); setRecordedUrl(''); setRecordingMode('idle'); setRecordingState('idle'); setRecordingDuration(0)
+  }
+
+  function useRecording() {
+    if (!recordedBlob) return
+    const ext = recordingMode === 'video' ? 'webm' : 'webm'
+    const mime = recordingMode === 'video' ? 'video/webm' : 'audio/webm'
+    const file = new File([recordedBlob], `recording-${Date.now()}.${ext}`, { type: mime })
+    setSelectedFile(file)
+    setSelectedFileType(recordingMode === 'video' ? 'video' : 'audio')
+    setRecordingMode('idle'); setRecordingState('idle')
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (VIDEO_TYPES.includes(file.type)) { setSelectedFile(file); setSelectedFileType('video') }
+    else if (AUDIO_TYPES.includes(file.type)) { setSelectedFile(file); setSelectedFileType('audio') }
+    else { showMsg('Unsupported file type.') }
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>, status: 'draft' | 'published') {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    const title = String(form.get('title') || '')
+    if (!title.trim()) { showMsg('Episode title is required.'); return }
+    if (status === 'published' && !selectedFile && !recordedBlob) { showMsg('Cannot publish: record audio/video or upload a file first.'); return }
+    let audio_path: string | null = null, audio_url: string | null = null, audio_duration = 0
+    let video_path: string | null = null, video_url: string | null = null, media_kind = 'audio'
+    let media_mime_type: string | null = null, media_size_bytes: number | null = null
+    if (selectedFile) {
+      if (selectedFileType === 'video') {
+        const r = await uploadVideoFile(selectedFile)
+        if (!r) return
+        video_path = r.path; video_url = r.url; audio_duration = r.duration; media_kind = 'video'
+        media_mime_type = selectedFile.type; media_size_bytes = selectedFile.size
+      } else {
+        const r = await uploadAudioFile(selectedFile)
+        if (!r) return
+        audio_path = r.path; audio_url = r.url; audio_duration = r.duration
+        media_mime_type = selectedFile.type; media_size_bytes = selectedFile.size
+      }
+    }
+    const coverFile = form.get('cover_image') as File | null
+    let cover_url: string | null = null, cover_path: string | null = null
+    if (coverFile && coverFile.size > 0) {
+      const result = await uploadCoverImage(coverFile)
+      if (result) { cover_url = result.url; cover_path = result.path }
+    }
+    const tagsRaw = String(form.get('tags') || '').split(',').map(t => t.trim()).filter(Boolean)
+    const { error } = await supabase.from('podcast_episodes').insert({
+      podcast_id: podcast.id, creator_id: userId, title,
+      description: String(form.get('description') || ''),
+      show_notes: String(form.get('show_notes') || ''),
+      season_number: form.get('season_number') ? Number(form.get('season_number')) : null,
+      episode_number: Number(form.get('episode_number') || 1),
+      audio_path, audio_url, audio_duration_seconds: audio_duration,
+      video_path, video_url, media_kind, media_mime_type, media_size_bytes,
+      cover_image_url: cover_url, cover_path,
+      transcript: String(form.get('transcript') || '') || null,
+      content_warning: String(form.get('content_warning') || '') || null,
+      explicit_content: Boolean(form.get('explicit_content')),
+      visibility: String(form.get('visibility') || 'public'),
+      comments_enabled: Boolean(form.get('comments_enabled') ?? true),
+      reactions_enabled: Boolean(form.get('reactions_enabled') ?? true),
+      status, published_at: status === 'published' ? new Date().toISOString() : null
+    })
+    if (error) { showMsg(error.message); return }
+    if (tagsRaw.length > 0) {
+      const { data: ep } = await supabase.from('podcast_episodes').select('id').eq('podcast_id', podcast.id).eq('creator_id', userId).order('created_at', { ascending: false }).limit(1).single()
+      if (ep) {
+        for (const tagName of tagsRaw) {
+          const slug = tagName.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-')
+          const { data: existingTag } = await supabase.from('podcast_tags').select('id').eq('slug', slug).single()
+          let tagId = existingTag?.id
+          if (!tagId) { const { data: nt } = await supabase.from('podcast_tags').insert({ name: tagName, slug }).select('id').single(); tagId = nt?.id }
+          if (tagId) await supabase.from('podcast_tag_links').upsert({ tag_id: tagId, episode_id: ep.id })
+        }
+      }
+    }
+    showMsg(status === 'published' ? 'Episode published!' : 'Episode draft saved.')
+    onSaved()
+  }
+
+  return <>
+    <div className="studio-section-header">
+      <h3>Create Episode — {podcast.title}</h3>
+      <button onClick={onBack}><ChevronLeft size={14} /> Back</button>
+    </div>
+
+    {/* Recording Section */}
+    {recordingState === 'idle' && recordingMode === 'idle' && <div className="record-section">
+      <h4><Mic size={14} /> Record or Upload Media</h4>
+      <p className="record-hint">Record directly in your browser, or upload an existing file. Media is optional for drafts.</p>
+      <div className="record-buttons">
+        {typeof navigator !== 'undefined' && navigator.mediaDevices && window.MediaRecorder && <>
+          <button type="button" className="record-btn audio" onClick={() => startRecording('audio')}><Mic size={16} /> Record Audio</button>
+          <button type="button" className="record-btn video" onClick={() => startRecording('video')}><Video size={16} /> Record Video</button>
+        </>}
+        <label className="record-btn upload"><Upload size={16} /> Upload file<input type="file" accept="audio/mpeg,audio/mp4,audio/aac,audio/x-m4a,audio/webm,audio/ogg,audio/wav,video/mp4,video/webm,video/quicktime" onChange={handleFileSelect} /></label>
+      </div>
+    </div>}
+
+    {/* Active Recording */}
+    {(recordingState === 'recording' || recordingState === 'paused') && <div className={`record-active ${recordingMode}`}>
+      <div className="record-indicator"><span className="pulse-dot" />{recordingState === 'recording' ? 'Recording' : 'Paused'} — {recordingMode === 'video' ? 'Video' : 'Audio'}</div>
+      <div className="record-timer">{formatRecTimer(recordingDuration)}</div>
+      {recordingMode === 'video' && <video ref={videoPreviewRef} autoPlay playsInline muted className="record-video-preview" />}
+      <div className="record-controls">
+        {recordingState === 'recording' ? <button type="button" onClick={pauseRecording}><Pause size={14} /> Pause</button> : <button type="button" onClick={resumeRecording}><Play size={14} /> Resume</button>}
+        <button type="button" className="stop" onClick={stopRecording}><Square size={14} /> Stop</button>
+        <button type="button" className="cancel" onClick={discardRecording}><X size={14} /> Cancel</button>
+      </div>
+    </div>}
+
+    {/* Recording Preview */}
+    {recordingState === 'preview' && <div className="record-preview">
+      <h4>Recording preview</h4>
+      {recordingMode === 'audio' ? <audio controls src={recordedUrl} className="record-audio-preview" /> : <video controls src={recordedUrl} className="record-video-preview" />}
+      <div className="record-preview-actions">
+        <button type="button" onClick={useRecording}><Play size={14} /> Use this recording</button>
+        <button type="button" className="cancel" onClick={discardRecording}><Trash2 size={14} /> Discard</button>
+      </div>
+    </div>}
+
+    {/* Selected File Display */}
+    {selectedFile && <div className="selected-file">
+      <div className="selected-file-info">
+        {selectedFileType === 'video' ? <Video size={16} /> : <FileAudio size={16} />}
+        <span><b>{selectedFile.name}</b><small>{(selectedFile.size / (1024 * 1024)).toFixed(1)} MB · {selectedFileType === 'video' ? 'Video' : 'Audio'}</small></span>
+      </div>
+      <button type="button" className="cancel" onClick={() => { setSelectedFile(null); setSelectedFileType(null) }}><X size={14} /> Remove</button>
+    </div>}
+
+    <form onSubmit={(e) => handleSubmit(e, 'draft')} className="podcast-form">
+      <label>Title<input name="title" required minLength={3} maxLength={160} placeholder="Episode title" /></label>
+      <div className="form-row">
+        <label>Season number<input name="season_number" type="number" min="1" placeholder="Optional" /></label>
+        <label>Episode number<input name="episode_number" type="number" min="1" defaultValue="1" required /></label>
+      </div>
+      <label>Description<textarea name="description" maxLength={8000} placeholder="Episode description" /></label>
+      <label>Show notes<small>Optional detailed notes for this episode.</small><textarea name="show_notes" maxLength={10000} placeholder="Detailed show notes (optional)" /></label>
+      <label>Cover image<small>Optional. Leave empty to use podcast cover.</small>
+        <div className="cover-upload">{coverPreview ? <img src={coverPreview} alt="Cover preview" /> : <div className="cover-placeholder"><Upload size={20} /> Click to upload cover</div>}
+          <input type="file" name="cover_image" accept="image/jpeg,image/png,image/webp" onChange={e => { const f = e.target.files?.[0]; if (f) setCoverPreview(URL.createObjectURL(f)) }} />
+        </div>
+      </label>
+      <label>Transcript<textarea name="transcript" maxLength={50000} placeholder="Optional transcript for accessibility" /></label>
+      <label>Tags<input name="tags" placeholder="Comma-separated tags" /></label>
+      <label>Content warning<input name="content_warning" placeholder="Optional content warning" /></label>
+      <div className="form-row">
+        <label>Visibility<select name="visibility"><option value="public">Public</option><option value="connections">Connections only</option><option value="group">Selected group</option><option value="private">Private draft</option></select></label>
+        <label className="check-label"><input type="checkbox" name="comments_enabled" defaultChecked /> Enable comments</label>
+        <label className="check-label"><input type="checkbox" name="reactions_enabled" defaultChecked /> Enable reactions</label>
+        <label className="check-label"><input type="checkbox" name="explicit_content" /> Explicit content</label>
+      </div>
+      <div className="episode-submit-row">
+        <button type="submit"><Upload size={14} /> Save as draft</button>
+        <button type="button" className="publish-btn" onClick={(e) => handleSubmit(e as any, 'published')}><Send size={14} /> Publish now</button>
+      </div>
+    </form>
+  </>
 }
 
 function EpisodeEditForm({ podcast, episodeId, userId, uploadCoverImage, onBack, onSaved, showMsg }: {
@@ -761,14 +993,14 @@ function EpisodeEditForm({ podcast, episodeId, userId, uploadCoverImage, onBack,
     const audioFile = form.get('audio_file') as File | null
     let audio_path = episode.audio_path, audio_url = episode.audio_url, audio_duration = episode.audio_duration_seconds
     if (audioFile && audioFile.size > 0) {
-      if (!AUDIO_TYPES.includes(audioFile.type)) { showMsg('Unsupported audio type. Use MP3, M4A, or AAC.'); return }
+      if (!AUDIO_TYPES.includes(audioFile.type)) { showMsg('Unsupported audio type. Supported: MP3, M4A, AAC, WebM, OGG, WAV.'); return }
       if (audioFile.size > MAX_AUDIO) { showMsg('Audio must be under 100MB.'); return }
       const audioDuration = await new Promise<number>(resolve => {
         const a = new Audio(); a.src = URL.createObjectURL(audioFile)
         a.onloadedmetadata = () => { resolve(Math.floor(a.duration || 0)); URL.revokeObjectURL(a.src) }
         a.onerror = () => { resolve(0); URL.revokeObjectURL(a.src) }
       })
-      if (audioDuration > MAX_DURATION) { showMsg(`Episode duration is ${Math.floor(audioDuration / 60)}:${String(audioDuration % 60).padStart(2, '0')}. Maximum allowed is 20 minutes.`); return }
+      if (audioDuration > MAX_DURATION) { showMsg(`Episode duration is ${Math.floor(audioDuration / 60)}:${String(audioDuration % 60).padStart(2, '0')}. Maximum allowed is 60 minutes.`); return }
       const path = `${userId}/${crypto.randomUUID()}-${safeFileName(audioFile.name)}`
       setUploadProgress(0)
       const { error } = await supabase.storage.from('podcast-audio').upload(path, audioFile, { contentType: audioFile.type })
@@ -822,7 +1054,8 @@ function EpisodeEditForm({ podcast, episodeId, userId, uploadCoverImage, onBack,
       <label>Description<textarea name="description" maxLength={8000} defaultValue={episode.description} /></label>
       <label>Show notes<small>Optional detailed notes.</small><textarea name="show_notes" maxLength={10000} defaultValue={(episode as any).show_notes || ''} placeholder="Detailed show notes" /></label>
       {episode.audio_url && <div className="current-audio"><small>Current audio:</small><audio controls src={episode.audio_url} preload="none" /></div>}
-      <label>Replace audio file<small>Leave empty to keep current audio. Max 100MB, max 20 minutes.</small><input type="file" name="audio_file" accept="audio/mpeg,audio/mp4,audio/aac,audio/x-m4a" /></label>
+      {(episode as any).video_url && <div className="current-audio"><small>Current video:</small><video controls src={(episode as any).video_url} preload="none" style={{ width: '100%', maxHeight: 200, borderRadius: 8 }} /></div>}
+      <label>Replace audio file<small>Leave empty to keep current. Max 100MB, max 60 minutes.</small><input type="file" name="audio_file" accept="audio/mpeg,audio/mp4,audio/aac,audio/x-m4a,audio/webm,audio/ogg,audio/wav" /></label>
       <label>Cover image<small>Leave empty to keep current cover.</small>
         <div className="cover-upload">{coverPreview ? <img src={coverPreview} alt="Cover preview" /> : <div className="cover-placeholder"><Upload size={20} /> Click to upload cover</div>}
           <input type="file" name="cover_image" accept="image/jpeg,image/png,image/webp" onChange={e => { const f = e.target.files?.[0]; if (f) setCoverPreview(URL.createObjectURL(f)) }} />
@@ -958,7 +1191,11 @@ export function PodcastPlatform({ userId, isHealer, podcastId, episodeId, studio
           </div>
           <div className="podcast-actions">
             <button onClick={follow}>{following ? 'Following' : 'Follow'}</button>
-            <button onClick={() => navigator.clipboard?.writeText(`${location.origin}${location.pathname}#/podcasts/${selected.id}`)}><Share2 size={14} /> Share</button>
+            <button onClick={async () => {
+              const url = `${location.origin}${location.pathname}#/podcasts/${selected.id}`
+              if (navigator.share) { try { await navigator.share({ title: selected.title, url }) } catch {} }
+              else { await navigator.clipboard?.writeText(url) }
+            }}><Share2 size={14} /> Share</button>
             <button onClick={() => setReportMode(!reportMode)}><ShieldAlert size={14} /> Report</button>
           </div>
           {reportMode && <form className="report-inline" onSubmit={e => { e.preventDefault(); submitReport() }}>
