@@ -25,7 +25,7 @@ type RecentMessage = { id:string;body:string;created_at:string;profiles?:{full_n
 type Friendship = { id:string; requester_id:string; addressee_id:string; status:string }
 type NextSession = { id:string; title:string; starts_at:string; host_id:string }
 type Feature = 'discover'|'people'|'healers'|'profile'|'notifications'|'messages'|'safety'|'connections'|'sessions'|'ai'|'podcasts'
-type AppRoute = { feature: Feature | null; roomId: string | null; profileId: string | null; podcastId: string | null; episodeId: string | null; podcastStudio: boolean; notFound: boolean }
+type AppRoute = { feature: Feature | null; roomId: string | null; profileId: string | null; podcastId: string | null; episodeId: string | null; podcastStudio: boolean; studioAction: string | null; studioPodcastId: string | null; studioEpisodeId: string | null; notFound: boolean }
 
 const BASE_URL = import.meta.env.VITE_BASE_URL || 'https://shirkan84.github.io/NovaResort/'
 const BASE_PATH = import.meta.env.VITE_BASE_PATH || '/NovaResort'
@@ -35,10 +35,21 @@ function routeFromHash(): AppRoute {
     .replace(new RegExp('^' + BASE_PATH.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '/?'), '')
     .replace(/^\/+|\/+$/g, '')
   const value = decodeURIComponent(window.location.hash.replace(/^#\/?/, '') || pathRoute || 'home')
-  const base = { feature: null, roomId: null, profileId: null, podcastId: null, episodeId: null, podcastStudio: false, notFound: false }
+  const base = { feature: null, roomId: null, profileId: null, podcastId: null, episodeId: null, podcastStudio: false, studioAction: null as string | null, studioPodcastId: null as string | null, studioEpisodeId: null as string | null, notFound: false }
   if (value.startsWith('room/')) return { ...base, roomId: value.slice(5) || null }
   if (value.startsWith('profile/')) return { ...base, profileId: value.slice(8) || null }
-  if (value === 'podcasts/manage') return { ...base, feature: 'podcasts', podcastStudio: true }
+  if (value === 'podcasts/manage') return { ...base, feature: 'podcasts', podcastStudio: true, studioAction: 'list' }
+  if (value === 'podcasts/manage/new') return { ...base, feature: 'podcasts', podcastStudio: true, studioAction: 'create' }
+  if (value.startsWith('podcasts/manage/')) {
+    const rest = value.slice('podcasts/manage/'.length)
+    const parts = rest.split('/')
+    const spId = parts[0] || null
+    if (parts.length === 1) return { ...base, feature: 'podcasts', podcastStudio: true, studioAction: 'episodes', studioPodcastId: spId }
+    if (parts[1] === 'edit') return { ...base, feature: 'podcasts', podcastStudio: true, studioAction: 'edit', studioPodcastId: spId }
+    if (parts[1] === 'episodes' && parts[2] === 'new') return { ...base, feature: 'podcasts', podcastStudio: true, studioAction: 'create-episode', studioPodcastId: spId }
+    if (parts[1] === 'episodes' && parts[3]) return { ...base, feature: 'podcasts', podcastStudio: true, studioAction: 'edit-episode', studioPodcastId: spId, studioEpisodeId: parts[3] }
+    return { ...base, feature: 'podcasts', podcastStudio: true, studioAction: 'list' }
+  }
   if (value.startsWith('podcasts/')) {
     const parts = value.split('/')
     return { ...base, feature: 'podcasts', podcastId: parts[1] || null, episodeId: parts[3] || null }
@@ -104,7 +115,10 @@ function HealerPodcastDashboard({ userId, onOpenStudio, onOpenPodcast }: { userI
     })
     return () => { live = false }
   }, [userId])
-  if (stats.podcastCount === 0 && recentEpisodes.length === 0) return null
+  if (stats.podcastCount === 0 && recentEpisodes.length === 0) return <section className="healer-podcast-dashboard">
+    <div className="section-head"><div><h2>Podcast Studio</h2><p>Create and share wellness audio with the community.</p></div><button onClick={onOpenStudio}>Open Studio <ChevronRight size={16}/></button></div>
+    <div className="empty-state" style={{padding:'24px 0'}}><Mic size={24}/><h3>Your podcast studio is ready</h3><p>Create your first podcast to start sharing audio content with members.</p><button className="healer-action" onClick={onOpenStudio}>Create your first podcast <ChevronRight size={14}/></button></div>
+  </section>
   return <section className="healer-podcast-dashboard">
     <div className="section-head"><div><h2>Podcast Studio</h2><p>Your podcast content at a glance.</p></div><button onClick={onOpenStudio}>Open Studio <ChevronRight size={16}/></button></div>
     <div className="healer-podcast-stats">
@@ -401,7 +415,7 @@ function App() {
   const closeOverlay = () => setRoute('home')
   const openProfile = (id:string) => setRoute(`profile/${id}`)
   const openHealers = () => setRoute('healers')
-  const openPodcast = (id?:string) => setRoute(id === 'manage' ? 'podcasts/manage' : id ? `podcasts/${id}` : 'podcasts')
+  const openPodcast = (id?:string) => { if (!id) return setRoute('podcasts'); if (id === 'manage') return setRoute('podcasts/manage'); if (id.startsWith('manage/')) return setRoute(`podcasts/${id}`); return setRoute(`podcasts/${id}`) }
   const openPodcastEpisode = (podcastId:string, episodeId:string) => setRoute(`podcasts/${podcastId}/episodes/${episodeId}`)
   async function signOut() {
     setSigningOut(true)
@@ -502,8 +516,10 @@ function App() {
           <button onClick={() => openFeature('sessions')}><CalendarDays size={16}/> Sessions</button>
           <button onClick={() => openFeature('ai')}><Bot size={16}/> AI Companion</button>
           <button onClick={() => openFeature('messages')}><MessageCircleMore size={16}/> Private rooms</button>
-          <button onClick={() => openPodcast('manage')}><Mic size={16}/> Create Podcast</button>
-          {canCreateContent && <button className="healer-action" onClick={() => openFeature('sessions')}><Video size={16}/> Host a session</button>}
+          {canCreateContent && <>
+            <button className="healer-action" onClick={() => openPodcast('manage')}><Mic size={16}/> Create Podcast</button>
+            <button className="healer-action" onClick={() => openFeature('sessions')}><Video size={16}/> Host a session</button>
+          </>}
         </div>
 
         <div className="layout">
@@ -567,7 +583,7 @@ function App() {
     {feature==='connections' && <Connections userId={session.user.id} onClose={closeOverlay} onOpenRoom={openRoom}/>} 
     {feature==='messages' && <PrivateChats onClose={closeOverlay} onOpenRoom={openRoom}/>} 
     {feature==='ai' && <AICompanion userId={session.user.id} onClose={closeOverlay}/>} 
-    {feature==='podcasts' && <PodcastPlatform userId={session.user.id} isHealer={canCreateContent} podcastId={route.podcastId} episodeId={route.episodeId} studio={route.podcastStudio} onClose={closeOverlay} onOpenPodcast={openPodcast} onOpenEpisode={openPodcastEpisode} onOpenProfile={openProfile} onPlayEpisode={setPodcastPlayer}/>} 
+    {feature==='podcasts' && <PodcastPlatform userId={session.user.id} isHealer={canCreateContent} podcastId={route.podcastId} episodeId={route.episodeId} studio={route.podcastStudio} studioAction={route.studioAction} studioPodcastId={route.studioPodcastId} studioEpisodeId={route.studioEpisodeId} onClose={closeOverlay} onOpenPodcast={openPodcast} onOpenEpisode={openPodcastEpisode} onOpenProfile={openProfile} onPlayEpisode={setPodcastPlayer}/>} 
     {feature==='profile' && <EditProfile userId={session.user.id} onClose={closeOverlay}/>} 
     {feature==='sessions' && <SessionsPage userId={session.user.id} isHealer={canCreateContent} onClose={closeOverlay}/>} 
     {feature==='notifications' && <Notifications userId={session.user.id} onClose={closeOverlay}/>} 

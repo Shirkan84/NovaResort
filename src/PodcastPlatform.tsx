@@ -273,7 +273,7 @@ function EpisodeList({ podcast, onPlay, selectedEpisodeId }: { podcast: Podcast;
   </div>
 }
 
-function PodcastStudio({ userId }: { userId: string }) {
+function PodcastStudio({ userId, initialAction = 'list', initialPodcastId, initialEpisodeId, onNavigate }: { userId: string; initialAction?: string; initialPodcastId?: string | null; initialEpisodeId?: string | null; onNavigate?: (id: string) => void }) {
   const [creatorStatus, setCreatorStatus] = useState<CreatorStatus | null>(null)
   const [podcasts, setPodcasts] = useState<Podcast[]>([])
   const [message, setMessage] = useState('')
@@ -322,11 +322,12 @@ function PodcastStudio({ userId }: { userId: string }) {
     if (podcastIds.length === 0) return
     const stats: Record<string, { plays: number; followers: number; episodes: number }> = {}
     await Promise.all(podcastIds.map(async (pid) => {
-      const [{ count: followers }, { count: episodes }] = await Promise.all([
+      const [{ count: followers }, { count: episodes }, { count: plays }] = await Promise.all([
         supabase.from('podcast_follows').select('podcast_id', { count: 'exact', head: true }).eq('podcast_id', pid),
-        supabase.from('podcast_episodes').select('id', { count: 'exact', head: true }).eq('podcast_id', pid).eq('status', 'published').is('deleted_at', null)
+        supabase.from('podcast_episodes').select('id', { count: 'exact', head: true }).eq('podcast_id', pid).eq('status', 'published').is('deleted_at', null),
+        supabase.from('podcast_listens').select('id', { count: 'exact', head: true }).in('episode_id',
+          (await supabase.from('podcast_episodes').select('id').eq('podcast_id', pid)).data?.map(e => e.id) || [])
       ])
-      const { count: plays } = await supabase.from('podcast_listens').select('id', { count: 'exact', head: true }).eq('podcast_id', pid)
       stats[pid] = { plays: plays || 0, followers: followers || 0, episodes: episodes || 0 }
     }))
     setPodcastStats(stats)
@@ -334,7 +335,46 @@ function PodcastStudio({ userId }: { userId: string }) {
 
   useEffect(() => { if (podcasts.length > 0) loadStats(podcasts.map(p => p.id)) }, [podcasts, loadStats])
 
+  const goToStudio = useCallback((action: string, podcastId?: string, episodeId?: string) => {
+    if (!onNavigate) return
+    if (action === 'list') onNavigate('manage')
+    else if (action === 'create') onNavigate('manage/new')
+    else if (action === 'episodes' && podcastId) onNavigate(`manage/${podcastId}`)
+    else if (action === 'edit' && podcastId) onNavigate(`manage/${podcastId}/edit`)
+    else if (action === 'create-episode' && podcastId) onNavigate(`manage/${podcastId}/episodes/new`)
+    else if (action === 'edit-episode' && podcastId && episodeId) onNavigate(`manage/${podcastId}/episodes/${episodeId}`)
+  }, [onNavigate])
+
+  useEffect(() => {
+    if (!initialAction) return
+    const viewMap: Record<string, typeof studioView> = {
+      'list': 'list', 'create': 'create', 'edit': 'edit',
+      'episodes': 'episodes', 'create-episode': 'create-episode', 'edit-episode': 'edit-episode'
+    }
+    setStudioView(viewMap[initialAction] || 'list')
+    if (initialPodcastId && podcasts.length > 0) {
+      const found = podcasts.find(p => p.id === initialPodcastId)
+      if (found) {
+        setSelectedPodcast(found)
+        setCoverPreview(found.cover_image_url)
+        if (['episodes', 'create-episode', 'edit-episode'].includes(initialAction)) {
+          loadEpisodes(initialPodcastId)
+        }
+      }
+    }
+  }, [initialAction, initialPodcastId, podcasts, loadEpisodes])
+
   function showMsg(text: string) { setMessage(text); setTimeout(() => setMessage(''), 4000) }
+
+  function navigateStudio(view: typeof studioView, podcast?: Podcast | null, episodeId?: string | null) {
+    setStudioView(view)
+    if (view === 'list') { setSelectedPodcast(null); setCoverPreview(null); goToStudio('list') }
+    else if (view === 'create') { setSelectedPodcast(null); setCoverPreview(null); goToStudio('create') }
+    else if (view === 'episodes' && podcast) { setSelectedPodcast(podcast); loadEpisodes(podcast.id); goToStudio('episodes', podcast.id) }
+    else if (view === 'edit' && podcast) { setSelectedPodcast(podcast); setCoverPreview(podcast.cover_image_url); goToStudio('edit', podcast.id) }
+    else if (view === 'create-episode' && podcast) { setSelectedPodcast(podcast); goToStudio('create-episode', podcast.id) }
+    else if (view === 'edit-episode' && podcast && episodeId) { setSelectedPodcast(podcast); goToStudio('edit-episode', podcast.id, episodeId) }
+  }
 
   async function uploadCoverImage(file: File): Promise<{ path: string; url: string } | null> {
     if (!IMAGE_TYPES.includes(file.type)) { showMsg('Unsupported image type. Use JPG, PNG, or WebP.'); return null }
@@ -393,7 +433,7 @@ function PodcastStudio({ userId }: { userId: string }) {
     if (error) { showMsg(error.message); return }
     showMsg('Podcast draft created successfully.')
     loadPodcasts()
-    setStudioView('list')
+    navigateStudio('list')
   }
 
   async function updatePodcast(event: FormEvent<HTMLFormElement>) {
@@ -416,8 +456,7 @@ function PodcastStudio({ userId }: { userId: string }) {
     if (error) { showMsg(error.message); return }
     showMsg('Podcast updated.')
     loadPodcasts()
-    setStudioView('list')
-    setSelectedPodcast(null)
+    navigateStudio('list')
   }
 
   async function togglePublishPodcast(podcast: Podcast) {
@@ -493,7 +532,7 @@ function PodcastStudio({ userId }: { userId: string }) {
     }
     showMsg('Episode draft created.')
     loadEpisodes(selectedPodcast.id)
-    setStudioView('episodes')
+    navigateStudio('episodes', selectedPodcast)
   }
 
 
@@ -552,7 +591,7 @@ function PodcastStudio({ userId }: { userId: string }) {
     {studioView === 'list' && <>
       <div className="studio-section-header">
         <h3>My Podcasts</h3>
-        <button onClick={() => { setCoverPreview(null); setStudioView('create') }}><Plus size={14} /> New podcast</button>
+        <button onClick={() => navigateStudio('create')}><Plus size={14} /> New podcast</button>
       </div>
       {podcasts.length === 0 ? <div className="empty-state">No podcasts yet. Create your first podcast to get started.</div> : <div className="studio-list">{podcasts.map(p => <article key={p.id} className="studio-podcast-card">
         <div className="studio-podcast-info">
@@ -566,8 +605,8 @@ function PodcastStudio({ userId }: { userId: string }) {
           </div>
         </div>
         <div className="studio-podcast-actions">
-          <button onClick={() => { setSelectedPodcast(p); setStudioView('episodes'); loadEpisodes(p.id) }}><List size={14} /> Episodes</button>
-          <button onClick={() => { setSelectedPodcast(p); setCoverPreview(p.cover_image_url); setStudioView('edit') }}><Edit3 size={14} /> Edit</button>
+          <button onClick={() => navigateStudio('episodes', p)}><List size={14} /> Episodes</button>
+          <button onClick={() => navigateStudio('edit', p)}><Edit3 size={14} /> Edit</button>
           <button onClick={() => togglePublishPodcast(p)}>{p.status === 'published' ? <><EyeOff size={14} /> Unpublish</> : <><Eye size={14} /> Publish</>}</button>
           <button onClick={() => deletePodcast(p)} className="danger"><Trash2 size={14} /> Archive</button>
         </div>
@@ -577,7 +616,7 @@ function PodcastStudio({ userId }: { userId: string }) {
     {studioView === 'create' && <>
       <div className="studio-section-header">
         <h3>Create Podcast</h3>
-        <button onClick={() => { setStudioView('list'); setCoverPreview(null) }}><ChevronLeft size={14} /> Back</button>
+        <button onClick={() => navigateStudio('list')}><ChevronLeft size={14} /> Back</button>
       </div>
       <form onSubmit={createPodcast} className="podcast-form">
         <label>Title<input name="title" required minLength={3} maxLength={120} placeholder="Podcast title" /></label>
@@ -602,7 +641,7 @@ function PodcastStudio({ userId }: { userId: string }) {
     {studioView === 'edit' && selectedPodcast && <>
       <div className="studio-section-header">
         <h3>Edit Podcast</h3>
-        <button onClick={() => { setStudioView('list'); setSelectedPodcast(null); setCoverPreview(null) }}><ChevronLeft size={14} /> Back</button>
+        <button onClick={() => navigateStudio('list')}><ChevronLeft size={14} /> Back</button>
       </div>
       <form onSubmit={updatePodcast} className="podcast-form">
         <label>Title<input name="title" required minLength={3} maxLength={120} defaultValue={selectedPodcast.title} /></label>
@@ -626,8 +665,8 @@ function PodcastStudio({ userId }: { userId: string }) {
       <div className="studio-section-header">
         <h3>Episodes — {selectedPodcast.title}</h3>
         <div className="header-btns">
-          <button onClick={() => { setStudioView('create-episode') }}><Plus size={14} /> New episode</button>
-          <button onClick={() => { setStudioView('list'); setSelectedPodcast(null) }}><ChevronLeft size={14} /> Back</button>
+          <button onClick={() => navigateStudio('create-episode', selectedPodcast)}><Plus size={14} /> New episode</button>
+          <button onClick={() => navigateStudio('list')}><ChevronLeft size={14} /> Back</button>
         </div>
       </div>
       <div className="episode-filter-tabs">
@@ -641,7 +680,7 @@ function PodcastStudio({ userId }: { userId: string }) {
           {ep.audio_url && <audio controls src={ep.audio_url} preload="none" style={{ height: 32, marginTop: 6 }} />}
         </div>
         <div className="studio-episode-actions">
-          <button onClick={() => { setEditingEpisodeId(ep.id); setCoverPreview(ep.cover_image_url); setStudioView('edit-episode') }}><Edit3 size={14} /> Edit</button>
+          <button onClick={() => navigateStudio('edit-episode', selectedPodcast, ep.id)}><Edit3 size={14} /> Edit</button>
           <button onClick={() => togglePublishEpisode(ep)}>{ep.status === 'published' ? <><EyeOff size={14} /> Unpublish</> : <><Eye size={14} /> Publish</>}</button>
           {ep.status !== 'published' && <button onClick={() => deleteEpisode(ep)} className="danger"><Trash2 size={14} /> Delete</button>}
         </div>
@@ -651,7 +690,7 @@ function PodcastStudio({ userId }: { userId: string }) {
     {studioView === 'create-episode' && selectedPodcast && <>
       <div className="studio-section-header">
         <h3>Create Episode — {selectedPodcast.title}</h3>
-        <button onClick={() => setStudioView('episodes')}><ChevronLeft size={14} /> Back</button>
+        <button onClick={() => navigateStudio('episodes', selectedPodcast)}><ChevronLeft size={14} /> Back</button>
       </div>
       <form onSubmit={createEpisode} className="podcast-form">
         <label>Title<input name="title" required minLength={3} maxLength={160} placeholder="Episode title" /></label>
@@ -682,8 +721,8 @@ function PodcastStudio({ userId }: { userId: string }) {
 
     {studioView === 'edit-episode' && selectedPodcast && editingEpisodeId && <EpisodeEditForm
       podcast={selectedPodcast} episodeId={editingEpisodeId} userId={userId} uploadCoverImage={uploadCoverImage}
-      onBack={() => { setStudioView('episodes'); setCoverPreview(null); setEditingEpisodeId(null) }}
-      onSaved={() => { loadEpisodes(selectedPodcast.id); setStudioView('episodes'); setCoverPreview(null); setEditingEpisodeId(null) }}
+      onBack={() => { navigateStudio('episodes') }}
+      onSaved={() => { loadEpisodes(selectedPodcast.id); navigateStudio('episodes', selectedPodcast) }}
       showMsg={showMsg}
     />}
 
@@ -802,8 +841,10 @@ function EpisodeEditForm({ podcast, episodeId, userId, uploadCoverImage, onBack,
   </>
 }
 
-export function PodcastPlatform({ userId, isHealer, podcastId, episodeId, studio, onClose, onOpenPodcast, onOpenEpisode, onOpenProfile, onPlayEpisode }: {
-  userId: string; isHealer?: boolean; podcastId?: string | null; episodeId?: string | null; studio?: boolean; onClose: () => void;
+export function PodcastPlatform({ userId, isHealer, podcastId, episodeId, studio, studioAction, studioPodcastId, studioEpisodeId, onClose, onOpenPodcast, onOpenEpisode, onOpenProfile, onPlayEpisode }: {
+  userId: string; isHealer?: boolean; podcastId?: string | null; episodeId?: string | null; studio?: boolean;
+  studioAction?: string | null; studioPodcastId?: string | null; studioEpisodeId?: string | null;
+  onClose: () => void;
   onOpenPodcast: (id: string) => void; onOpenEpisode: (podcastId: string, episodeId: string) => void;
   onOpenProfile: (id: string) => void; onPlayEpisode: (episode: PlayerEpisode) => void
 }) {
@@ -896,7 +937,7 @@ export function PodcastPlatform({ userId, isHealer, podcastId, episodeId, studio
       <button onClick={onClose}><X /></button>
     </header>
 
-    {studio ? <PodcastStudio userId={userId} /> : selected ? <div className="podcast-detail-view">
+    {studio ? <PodcastStudio userId={userId} initialAction={studioAction || 'list'} initialPodcastId={studioPodcastId} initialEpisodeId={studioEpisodeId} onNavigate={onOpenPodcast} /> : selected ? <div className="podcast-detail-view">
       <button className="back-link" onClick={() => onOpenPodcast('')}><ChevronLeft size={14} /> All podcasts</button>
       {selected.creator_id === userId && <div className="podcast-owner-actions"><button onClick={() => onOpenPodcast('manage')}><Mic size={14} /> Manage in Studio</button></div>}
       <section className="podcast-hero">

@@ -22,6 +22,7 @@ const ROUTE_TO_BUTTON: Record<string, string> = {
 
 function isPodcastRoute(route: string): boolean {
   if (route === 'podcasts' || route === 'podcasts/manage') return true
+  if (route.startsWith('podcasts/manage/')) return true
   const parts = route.split('/')
   return parts[0] === 'podcasts' && (parts.length === 2 || (parts.length >= 3 && parts[2] === 'episodes'))
 }
@@ -62,10 +63,8 @@ function applyRoute(attempt = 0) {
   }
   if (route.startsWith('room/') || isProfileRoute(route)) return
   if (isPodcastRoute(route)) {
-    if (route === 'podcasts/manage') {
-      if (!clickMatchingButton('Podcasts') && attempt < 20) {
-        window.setTimeout(() => applyRoute(attempt + 1), 250)
-      }
+    if (!clickMatchingButton('Podcasts') && attempt < 20) {
+      window.setTimeout(() => applyRoute(attempt + 1), 250)
     }
     return
   }
