@@ -10,6 +10,7 @@ import { ChatRoom, Connections, DbRoom, EditProfile, Notifications, PeopleDirect
 import { PrivateChats, PrivateChatRoom } from './PrivateMessaging'
 import { DiscoverPeople, HealersDirectory } from './PeopleDiscovery'
 import { SessionsPage } from './SessionsEvents'
+import { HealerDashboard } from './HealerDashboard'
 import { PodcastPlatform, PodcastMiniPlayer, PopularPodcastsStrip, ProfilePodcastSection, PlayerEpisode } from './PodcastPlatform'
 import { getFeaturedHealers } from './services/healers'
 import { useUserRole } from './hooks/useUserRole'
@@ -23,7 +24,7 @@ type LiveProfile = { id:string;full_name:string;display_name:string|null;avatar_
 type RecentMessage = { id:string;body:string;created_at:string;profiles?:{full_name:string;avatar_url:string|null}|null;rooms?:{id:string;name:string}|null }
 type Friendship = { id:string; requester_id:string; addressee_id:string; status:string }
 type NextSession = { id:string; title:string; starts_at:string; host_id:string }
-type Feature = 'discover'|'people'|'healers'|'profile'|'notifications'|'messages'|'safety'|'connections'|'sessions'|'podcasts'
+type Feature = 'discover'|'people'|'healers'|'profile'|'notifications'|'messages'|'safety'|'connections'|'sessions'|'podcasts'|'healer'
 type AppRoute = { feature: Feature | null; roomId: string | null; profileId: string | null; podcastId: string | null; episodeId: string | null; podcastStudio: boolean; studioAction: string | null; studioPodcastId: string | null; studioEpisodeId: string | null; sessionId: string | null; sessionView: string | null; notFound: boolean }
 
 const BASE_URL = import.meta.env.VITE_BASE_URL || 'https://shirkan84.github.io/NovaResort/'
@@ -59,6 +60,7 @@ function routeFromHash(): AppRoute {
   if (value === 'healers' || value === 'community/healers') return { ...base, feature: 'healers' }
   if (value === 'connections') return { ...base, feature: 'connections' }
   if (value === 'messages') return { ...base, feature: 'messages' }
+  if (value === 'healer' || value === 'healer/dashboard') return { ...base, feature: 'healer' }
   if (value.startsWith('sessions/')) {
     const parts = value.split('/')
     const sId = parts[1] || null
@@ -85,6 +87,7 @@ function navFromFeature(feature: Feature | null) {
   if (feature === 'discover') return 'Discover'
   if (feature === 'people') return 'Community'
   if (feature === 'healers') return 'Healers'
+  if (feature === 'healer') return 'Healer Dashboard'
   if (feature === 'messages') return 'Messages'
   if (feature === 'connections') return 'Connections'
   if (feature === 'sessions') return 'Sessions'
@@ -476,6 +479,7 @@ function App() {
         {[
           [Home, 'Home'], [Compass, 'Discover'], [UsersRound, 'Community'], [Sun, 'Healers'], [Headphones, 'Podcasts'], [Heart, 'Connections'], [MessageCircleMore, 'Messages'], [CalendarDays, 'Sessions']
         ].map(([Icon, label]) => <button key={label as string} className={activeNav === label ? 'nav-item active' : 'nav-item'} onClick={() => {setMenuOpen(false);setRoute(label==='Community'?'community':label==='Discover'?'discover':label==='Healers'?'healers':label==='Podcasts'?'podcasts':label==='Connections'?'connections':label==='Messages'?'messages':label==='Sessions'?'sessions':'home')}}><Icon size={19}/><span>{label as string}</span>{label === 'Connections' && metrics.connections > 0 && <i>{metrics.connections}</i>}</button>)}
+        {canCreateContent && <button className={activeNav === 'Healer Dashboard' ? 'nav-item active' : 'nav-item'} onClick={() => {setMenuOpen(false);setRoute('healer')}}><ShieldCheck size={19}/><span>Healer Dashboard</span></button>}
       </nav>
       <div className="side-card">
         <div className="side-card-icon"><ShieldCheck size={20}/></div>
@@ -593,6 +597,7 @@ function App() {
     {feature==='podcasts' && <PodcastPlatform userId={session.user.id} isHealer={canCreateContent} podcastId={route.podcastId} episodeId={route.episodeId} studio={route.podcastStudio} studioAction={route.studioAction} studioPodcastId={route.studioPodcastId} studioEpisodeId={route.studioEpisodeId} onClose={closeOverlay} onOpenPodcast={openPodcast} onOpenEpisode={openPodcastEpisode} onOpenProfile={openProfile} onPlayEpisode={setPodcastPlayer}/>} 
     {feature==='profile' && <EditProfile userId={session.user.id} onClose={closeOverlay}/>} 
     {feature==='sessions' && <SessionsPage userId={session.user.id} isHealer={canCreateContent} onClose={closeOverlay} initialSessionId={route.sessionId} initialSessionView={route.sessionView}/>} 
+    {feature==='healer' && <HealerDashboard userId={session.user.id} onOpenSession={(id)=>{closeOverlay();openFeature('sessions');setTimeout(()=>setRoute(`sessions/${id}`),50)}} onCreateSession={()=>{closeOverlay();openFeature('sessions');setTimeout(()=>setRoute('sessions'),100)}} onClose={closeOverlay}/>} 
     {feature==='notifications' && <Notifications userId={session.user.id} onClose={closeOverlay}/>} 
     {feature==='safety' && <SafetyCenter onClose={closeOverlay}/>} 
     {profilePreview && <div className="feature-overlay"><section className="profile-window public-profile-window"><header><div><h2>{profileName(profilePreview)}</h2><p>{roleLabel(profilePreview)}{profilePreview.country?` · ${profilePreview.country}`:''}</p></div><button onClick={closeOverlay}><X/></button></header><div className="public-profile-body"><span className="avatar healer rose public-profile-avatar">{profilePreview.avatar_url?<img src={profilePreview.avatar_url} alt={`${profileName(profilePreview)} profile photo`} loading="lazy"/>:profileInitials(profileName(profilePreview))}<i className={profilePreview.online?'online':''}/></span><p>{profilePreview.about||'This member has not added an introduction yet.'}</p><div className="healer-tags">{[...(profilePreview.profile_type==='healer'?profilePreview.specialties||[]:[]),...(profilePreview.interests||[])].slice(0,6).map(tag=><span key={tag}>{tag}</span>)}</div><ProfilePreviewActions profile={profilePreview} friendships={friendships} userId={session.user.id} onConnect={connectWith} onMessage={startPrivateMessage} onSessions={()=>openFeature('sessions')} onCreatePodcast={()=>openPodcast('manage')} onCreateSession={()=>openFeature('sessions')}/></div></section></div>}

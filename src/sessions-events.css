@@ -1482,3 +1482,33 @@
 
 .chat-error-toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);padding:10px 16px;background:#c0392b;color:#fff;border-radius:8px;font-size:12px;font-weight:600;z-index:100;display:flex;align-items:center;gap:8px;box-shadow:0 4px 16px rgba(0,0,0,0.4)}
 .chat-error-toast button{border:0;background:transparent;color:#fff;cursor:pointer;font-size:16px}
+
+/* ── Healer Dashboard ───────────────────────────────── */
+.healer-dashboard{max-height:min(800px,92vh)}
+.healer-stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:16px 20px;border-bottom:1px solid var(--line,#1e2d23)}
+.healer-stat-card{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--card,#0e1a14);border:1px solid var(--line,#1e2d23);border-radius:10px;color:var(--green,#2d6a4f)}
+.healer-stat-card b{font-size:20px;font-weight:800;color:var(--text,#e0e0e0);display:block}
+.healer-stat-card span{font-size:10px;color:var(--muted,#888)}
+.healer-section-header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px 8px}
+.healer-section-header h3{margin:0;font-size:14px;color:var(--text,#e0e0e0)}
+.healer-create-btn{display:inline-flex;align-items:center;gap:4px;padding:7px 14px;border:0;border-radius:8px;background:var(--green,#2d6a4f);color:#fff;font-size:12px;font-weight:700;cursor:pointer}
+.healer-create-btn:hover{background:#245a3f}
+.healer-session-list{padding:0 20px 20px;display:flex;flex-direction:column;gap:8px}
+.healer-session-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;background:var(--card,#0e1a14);border:1px solid var(--line,#1e2d23);border-radius:12px;transition:border-color 0.15s}
+.healer-session-row.live{border-color:rgba(220,50,50,0.3);background:rgba(220,50,50,0.04)}
+.healer-session-info{flex:1;min-width:0}
+.healer-session-title{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.healer-session-title h4{margin:0;font-size:13px;color:var(--text,#e0e0e0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.healer-session-meta{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted,#888)}
+.healer-session-meta span{display:inline-flex;align-items:center;gap:3px}
+.healer-session-actions{display:flex;gap:6px;flex-shrink:0}
+.healer-action-btn{display:inline-flex;align-items:center;gap:4px;padding:6px 12px;border:1px solid var(--line,#1e2d23);border-radius:6px;background:var(--card,#0e1a14);color:var(--muted,#aaa);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap}
+.healer-action-btn:hover{background:var(--line,#1e2d23);color:var(--text,#ccc)}
+.healer-action-btn.primary{background:var(--green,#2d6a4f);border-color:var(--green,#2d6a4f);color:#fff}
+.healer-action-btn.primary:hover{background:#245a3f}
+.session-status-badge{padding:2px 8px;border-radius:4px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em}
+.session-status-badge.published{background:rgba(45,106,79,0.12);color:var(--green,#2d6a4f)}
+.session-status-badge.live{background:rgba(220,50,50,0.12);color:#e74c3c}
+.session-status-badge.completed{background:rgba(150,150,150,0.12);color:#999}
+.session-status-badge.cancelled{background:rgba(220,50,50,0.08);color:#e74c3c}
+@media(max-width:760px){.healer-stats-row{grid-template-columns:repeat(2,1fr)}.healer-session-row{flex-direction:column;align-items:flex-start}.healer-session-actions{width:100%}}

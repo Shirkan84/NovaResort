@@ -7,8 +7,8 @@ declare global {
 
 /**
  * JitsiLiveRoomProvider – uses Jitsi Meet External API via iframe.
- * Free hosted at meet.jit.si or self-hosted.
- * Falls back to MockLiveRoomProvider behavior for chat/state via Supabase.
+ * Maintains a UUID↔Jitsi-participant-ID mapping so mute/kick commands
+ * work correctly cross-platform.
  */
 export class JitsiLiveRoomProvider implements LiveRoomProvider {
   private sessionId = ''
@@ -22,6 +22,11 @@ export class JitsiLiveRoomProvider implements LiveRoomProvider {
   private api: any = null
   private containerEl: HTMLElement | null = null
 
+  /** Maps Supabase UUID → Jitsi participant ID */
+  private uuidToJitsi = new Map<string, string>()
+  /** Maps Jitsi participant ID → Supabase UUID */
+  private jitsiToUuid = new Map<string, string>()
+
   async init(sessionId: string, userId: string, isHost: boolean): Promise<void> {
     this.sessionId = sessionId
     this.userId = userId
@@ -29,11 +34,9 @@ export class JitsiLiveRoomProvider implements LiveRoomProvider {
   }
 
   async join(): Promise<void> {
-    // Join room state in DB
     const { error } = await supabase.rpc('join_session_room', { target_session: this.sessionId })
     if (error) throw new Error(error.message)
 
-    // Load Jitsi External API script if not loaded
     if (!window.JitsiMeetExternalAPI) {
       await new Promise<void>((resolve, reject) => {
         const script = document.createElement('script')
@@ -45,7 +48,6 @@ export class JitsiLiveRoomProvider implements LiveRoomProvider {
       })
     }
 
-    // Create Jitsi container
     this.containerEl = document.getElementById('jitsi-container')
     if (!this.containerEl) throw new Error('Jitsi container not found')
 
@@ -58,11 +60,11 @@ export class JitsiLiveRoomProvider implements LiveRoomProvider {
       configOverwrite: {
         startAudioOnly: false,
         startScreenSharing: false,
-        enableChat: false, // We use our own chat via Supabase
+        enableChat: false,
         disableDeepLinking: true,
         disableProfile: true,
         prejoinPageEnabled: false,
-        toolbarButtons: [], // Hide default toolbar — we have our own
+        toolbarButtons: [],
       },
       interfaceConfigOverwrite: {
         SHOW_JITSI_WATERMARK: false,
@@ -74,7 +76,6 @@ export class JitsiLiveRoomProvider implements LiveRoomProvider {
       }
     })
 
-    // Map Jitsi events to our provider events
     this.api.addEventListener('audioMuteStatusChanged', (e: any) => {
       this._isMuted = e.muted
     })
@@ -87,10 +88,16 @@ export class JitsiLiveRoomProvider implements LiveRoomProvider {
       this._isScreenSharing = e.on
     })
 
-    this.api.addEventListener('participantJoined', (id: string) => {
-      const displayName = this.api.getParticipantInfo(id)?.displayName || ''
+    // Track participants and build UUID↔JitsiID map
+    this.api.addEventListener('participantJoined', (jitsiId: string) => {
+      const info = this.api.getParticipantInfo(jitsiId)
+      const displayName = info?.displayName || ''
+      // displayName is the UUID we passed as userInfo.id on join
+      const uuid = displayName || jitsiId
+      this.uuidToJitsi.set(uuid, jitsiId)
+      this.jitsiToUuid.set(jitsiId, uuid)
       this.events.onParticipantJoin?.({
-        userId: id,
+        userId: uuid,
         displayName,
         avatarUrl: null,
         role: 'participant',
@@ -102,8 +109,11 @@ export class JitsiLiveRoomProvider implements LiveRoomProvider {
       })
     })
 
-    this.api.addEventListener('participantLeft', (id: string) => {
-      this.events.onParticipantLeave?.(id)
+    this.api.addEventListener('participantLeft', (jitsiId: string) => {
+      const uuid = this.jitsiToUuid.get(jitsiId) || jitsiId
+      this.jitsiToUuid.delete(jitsiId)
+      this.uuidToJitsi.delete(uuid)
+      this.events.onParticipantLeave?.(uuid)
     })
 
     this.api.addEventListener('readyToClose', () => {
@@ -177,6 +187,8 @@ export class JitsiLiveRoomProvider implements LiveRoomProvider {
       supabase.removeChannel(this.channel)
       this.channel = null
     }
+    this.uuidToJitsi.clear()
+    this.jitsiToUuid.clear()
   }
 
   async toggleCamera(): Promise<boolean> {
@@ -225,15 +237,20 @@ export class JitsiLiveRoomProvider implements LiveRoomProvider {
     await supabase.rpc('pin_session_chat', { target_message: messageId, pin })
   }
 
-  async muteParticipant(userId: string, muted: boolean): Promise<void> {
-    await supabase.rpc('mute_session_participant', { target_session: this.sessionId, target_user: userId, muted })
-    // Also mute in Jitsi if available
-    this.api?.executeCommand('muteParticipant', userId, muted)
+  async muteParticipant(uuid: string, muted: boolean): Promise<void> {
+    await supabase.rpc('mute_session_participant', { target_session: this.sessionId, target_user: uuid, muted })
+    const jitsiId = this.uuidToJitsi.get(uuid)
+    if (jitsiId) {
+      this.api?.executeCommand('muteParticipant', jitsiId, muted)
+    }
   }
 
-  async removeParticipant(userId: string): Promise<void> {
-    await supabase.rpc('remove_session_participant', { target_session: this.sessionId, target_user: userId })
-    this.api?.executeCommand('kickParticipant', userId)
+  async removeParticipant(uuid: string): Promise<void> {
+    await supabase.rpc('remove_session_participant', { target_session: this.sessionId, target_user: uuid })
+    const jitsiId = this.uuidToJitsi.get(uuid)
+    if (jitsiId) {
+      this.api?.executeCommand('kickParticipant', jitsiId)
+    }
   }
 
   getLocalState() {
@@ -252,5 +269,7 @@ export class JitsiLiveRoomProvider implements LiveRoomProvider {
       supabase.removeChannel(this.channel)
       this.channel = null
     }
+    this.uuidToJitsi.clear()
+    this.jitsiToUuid.clear()
   }
 }
