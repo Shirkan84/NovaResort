@@ -1,13 +1,12 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import {
   Bell, CalendarDays, ChevronDown, ChevronRight, CircleUserRound, Clock3,
-  Bot, Compass, Heart, Home, Leaf, LockKeyhole, Menu, MessageCircleMore, MoreHorizontal,
+  Compass, Heart, Home, Leaf, LockKeyhole, Menu, MessageCircleMore, MoreHorizontal,
   Search, Send, Settings, ShieldCheck, Sparkles, UsersRound, Video, X, Moon, Sun, Languages, UserPlus, Headphones, Mic
 } from 'lucide-react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import { ChatRoom, Connections, DbRoom, EditProfile, Notifications, PeopleDirectory, SafetyCenter } from './CommunityFeatures'
-import { AICompanion } from './AICompanion'
 import { PrivateChats, PrivateChatRoom } from './PrivateMessaging'
 import { DiscoverPeople, HealersDirectory } from './PeopleDiscovery'
 import { SessionsPage } from './SessionsEvents'
@@ -24,7 +23,7 @@ type LiveProfile = { id:string;full_name:string;display_name:string|null;avatar_
 type RecentMessage = { id:string;body:string;created_at:string;profiles?:{full_name:string;avatar_url:string|null}|null;rooms?:{id:string;name:string}|null }
 type Friendship = { id:string; requester_id:string; addressee_id:string; status:string }
 type NextSession = { id:string; title:string; starts_at:string; host_id:string }
-type Feature = 'discover'|'people'|'healers'|'profile'|'notifications'|'messages'|'safety'|'connections'|'sessions'|'ai'|'podcasts'
+type Feature = 'discover'|'people'|'healers'|'profile'|'notifications'|'messages'|'safety'|'connections'|'sessions'|'podcasts'
 type AppRoute = { feature: Feature | null; roomId: string | null; profileId: string | null; podcastId: string | null; episodeId: string | null; podcastStudio: boolean; studioAction: string | null; studioPodcastId: string | null; studioEpisodeId: string | null; sessionId: string | null; sessionView: string | null; notFound: boolean }
 
 const BASE_URL = import.meta.env.VITE_BASE_URL || 'https://shirkan84.github.io/NovaResort/'
@@ -60,7 +59,6 @@ function routeFromHash(): AppRoute {
   if (value === 'healers' || value === 'community/healers') return { ...base, feature: 'healers' }
   if (value === 'connections') return { ...base, feature: 'connections' }
   if (value === 'messages') return { ...base, feature: 'messages' }
-  if (value === 'ai' || value.startsWith('ai/')) return { ...base, feature: 'ai' }
   if (value.startsWith('sessions/')) {
     const parts = value.split('/')
     const sId = parts[1] || null
@@ -88,7 +86,6 @@ function navFromFeature(feature: Feature | null) {
   if (feature === 'people') return 'Community'
   if (feature === 'healers') return 'Healers'
   if (feature === 'messages') return 'Messages'
-  if (feature === 'ai') return 'AI Companion'
   if (feature === 'connections') return 'Connections'
   if (feature === 'sessions') return 'Sessions'
   if (feature === 'podcasts') return 'Podcasts'
@@ -475,8 +472,8 @@ function App() {
       <div className="side-top"><Logo/><button className="icon-btn close-mobile" onClick={() => setMenuOpen(false)}><X size={20}/></button></div>
       <nav>
         {[
-          [Home, 'Home'], [Compass, 'Discover'], [UsersRound, 'Community'], [Sun, 'Healers'], [Headphones, 'Podcasts'], [Heart, 'Connections'], [MessageCircleMore, 'Messages'], [Bot, 'AI Companion'], [CalendarDays, 'Sessions']
-        ].map(([Icon, label]) => <button key={label as string} className={activeNav === label ? 'nav-item active' : 'nav-item'} onClick={() => {setMenuOpen(false);setRoute(label==='Community'?'community':label==='Discover'?'discover':label==='Healers'?'healers':label==='Podcasts'?'podcasts':label==='Connections'?'connections':label==='Messages'?'messages':label==='AI Companion'?'ai':label==='Sessions'?'sessions':'home')}}><Icon size={19}/><span>{label as string}</span>{label === 'Connections' && metrics.connections > 0 && <i>{metrics.connections}</i>}</button>)}
+          [Home, 'Home'], [Compass, 'Discover'], [UsersRound, 'Community'], [Sun, 'Healers'], [Headphones, 'Podcasts'], [Heart, 'Connections'], [MessageCircleMore, 'Messages'], [CalendarDays, 'Sessions']
+        ].map(([Icon, label]) => <button key={label as string} className={activeNav === label ? 'nav-item active' : 'nav-item'} onClick={() => {setMenuOpen(false);setRoute(label==='Community'?'community':label==='Discover'?'discover':label==='Healers'?'healers':label==='Podcasts'?'podcasts':label==='Connections'?'connections':label==='Messages'?'messages':label==='Sessions'?'sessions':'home')}}><Icon size={19}/><span>{label as string}</span>{label === 'Connections' && metrics.connections > 0 && <i>{metrics.connections}</i>}</button>)}
       </nav>
       <div className="side-card">
         <div className="side-card-icon"><ShieldCheck size={20}/></div>
@@ -523,8 +520,7 @@ function App() {
           <button onClick={() => openFeature('discover')}><UsersRound size={16}/> Find people</button>
           <button onClick={openHealers}><Sun size={16}/> Find a healer</button>
           <button onClick={() => openFeature('podcasts')}><Headphones size={16}/> Podcasts</button>
-          <button onClick={() => openFeature('sessions')}><CalendarDays size={16}/> Sessions</button>
-          <button onClick={() => openFeature('ai')}><Bot size={16}/> AI Companion</button>
+           <button onClick={() => openFeature('sessions')}><CalendarDays size={16}/> Sessions</button>
           <button onClick={() => openFeature('messages')}><MessageCircleMore size={16}/> Private rooms</button>
           {canCreateContent && <>
             <button className="healer-action" onClick={() => openPodcast('manage')}><Mic size={16}/> Create Podcast</button>
@@ -592,7 +588,6 @@ function App() {
     {feature==='healers' && <HealersDirectory userId={session.user.id} onClose={closeOverlay} onOpenRoom={openRoom} onOpenProfile={openProfile} onOpenSessions={()=>openFeature('sessions')}/>} 
     {feature==='connections' && <Connections userId={session.user.id} onClose={closeOverlay} onOpenRoom={openRoom}/>} 
     {feature==='messages' && <PrivateChats onClose={closeOverlay} onOpenRoom={openRoom}/>} 
-    {feature==='ai' && <AICompanion userId={session.user.id} onClose={closeOverlay}/>} 
     {feature==='podcasts' && <PodcastPlatform userId={session.user.id} isHealer={canCreateContent} podcastId={route.podcastId} episodeId={route.episodeId} studio={route.podcastStudio} studioAction={route.studioAction} studioPodcastId={route.studioPodcastId} studioEpisodeId={route.studioEpisodeId} onClose={closeOverlay} onOpenPodcast={openPodcast} onOpenEpisode={openPodcastEpisode} onOpenProfile={openProfile} onPlayEpisode={setPodcastPlayer}/>} 
     {feature==='profile' && <EditProfile userId={session.user.id} onClose={closeOverlay}/>} 
     {feature==='sessions' && <SessionsPage userId={session.user.id} isHealer={canCreateContent} onClose={closeOverlay} initialSessionId={route.sessionId} initialSessionView={route.sessionView}/>} 

@@ -38,7 +38,6 @@
 src/
   App.tsx              — Main app shell, auth, routing, homepage
   CommunityFeatures.tsx — Chat rooms, connections, profile editor, safety center
-  AICompanion.tsx       — AI chat interface
   PrivateMessaging.tsx  — Private 1:1 messaging
   PeopleDiscovery.tsx   — People directory, healers directory
   SessionsEvents.tsx    — Sessions/events listing
