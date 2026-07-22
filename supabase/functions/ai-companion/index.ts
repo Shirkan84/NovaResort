@@ -77,19 +77,27 @@ async function readJson(request: Request): Promise<Record<string, unknown>> {
 /* ------------------------------------------------------------------ */
 async function novaContextFor(admin: ReturnType<typeof createClient>, text: string) {
   if (!shouldLoadNovaContext(text)) return "";
-  const [roomsResult, healersResult, sessionsResult] = await Promise.all([
-    admin.rpc("list_public_rooms").catch(() => ({ data: [] })),
-    admin.from("profiles").select("display_name,full_name,about,specialties").eq("profile_type", "healer").neq("visibility", "private").limit(6).catch(() => ({ data: [] })),
-    admin.from("sessions").select("title,description,category,starts_at").eq("visibility", "public").in("status", ["published", "live", "registration_closed"]).gte("starts_at", new Date().toISOString()).order("starts_at", { ascending: true }).limit(5).catch(() => ({ data: [] })),
-  ]);
-  const rooms = (roomsResult.data || []).slice(0, 8).map((r: any) => `Room: ${r.name} - ${r.description || "wellness room"}${r.online_members ? " (live)" : ""}`);
-  const healers = (healersResult.data || []).map((h: any) => {
-    const specs = Array.isArray(h.specialties) && h.specialties.length ? ` Specialties: ${h.specialties.slice(0, 4).join(", ")}.` : "";
-    return `Healer: ${h.display_name || h.full_name || "Nova healer"} - ${h.about || "Available for supportive wellness conversations"}.${specs}`;
-  });
-  const sessions = (sessionsResult.data || []).map((s: any) => `Session: ${s.title} - ${s.description || s.category || "Upcoming wellness session"}${s.starts_at ? ` at ${s.starts_at}` : ""}`);
-  const lines = [...rooms, ...healers, ...sessions].slice(0, 14);
-  return lines.length ? `Public Nova Resort context. Use only this public context when recommending rooms, healers, or sessions:\n${lines.join("\n")}` : "";
+  try {
+    const [roomsResult, healersResult, sessionsResult] = await Promise.all([
+      admin.rpc("list_public_rooms"),
+      admin.from("profiles").select("display_name,full_name,about,specialties").eq("profile_type", "healer").neq("visibility", "private").limit(6),
+      admin.from("sessions").select("title,description,category,starts_at").eq("visibility", "public").in("status", ["published", "live", "registration_closed"]).gte("starts_at", new Date().toISOString()).order("starts_at", { ascending: true }).limit(5),
+    ]);
+    if (roomsResult.error) console.error("Failed to load rooms:", roomsResult.error.message);
+    if (healersResult.error) console.error("Failed to load healers:", healersResult.error.message);
+    if (sessionsResult.error) console.error("Failed to load sessions:", sessionsResult.error.message);
+    const rooms = (roomsResult.data || []).slice(0, 8).map((r: any) => `Room: ${r.name} - ${r.description || "wellness room"}${r.online_members ? " (live)" : ""}`);
+    const healers = (healersResult.data || []).map((h: any) => {
+      const specs = Array.isArray(h.specialties) && h.specialties.length ? ` Specialties: ${h.specialties.slice(0, 4).join(", ")}.` : "";
+      return `Healer: ${h.display_name || h.full_name || "Nova healer"} - ${h.about || "Available for supportive wellness conversations"}.${specs}`;
+    });
+    const sessions = (sessionsResult.data || []).map((s: any) => `Session: ${s.title} - ${s.description || s.category || "Upcoming wellness session"}${s.starts_at ? ` at ${s.starts_at}` : ""}`);
+    const lines = [...rooms, ...healers, ...sessions].slice(0, 14);
+    return lines.length ? `Public Nova Resort context. Use only this public context when recommending rooms, healers, or sessions:\n${lines.join("\n")}` : "";
+  } catch (err) {
+    console.error("novaContextFor failed:", err);
+    return "";
+  }
 }
 
 /* ------------------------------------------------------------------ */
