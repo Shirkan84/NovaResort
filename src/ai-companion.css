@@ -555,6 +555,18 @@
 
 .ai-error span {
   line-height:1.45;
+  flex:1;
+}
+
+.ai-error-close {
+  flex:none;
+  background:transparent;
+  border:0;
+  color:#d7e3dd;
+  cursor:pointer;
+  padding:2px;
+  display:grid;
+  place-items:center;
 }
 
 .starter-row {

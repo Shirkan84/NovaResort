@@ -11,7 +11,7 @@ type AiMessage = {
   id:string; conversation_id:string; user_id:string; role:'user'|'assistant'|'system';
   content:string; created_at:string; deleted_at:string|null
 }
-type AiError = { code:string; message:string; requestId?:string }
+type AiError = { code:string; message:string; requestId?:string; limitReached?:boolean }
 
 const starters = [
   'Talk through what is on my mind',
@@ -58,11 +58,31 @@ function timeLabel(value:string) {
   return new Date(value).toLocaleString([], { dateStyle:'medium', timeStyle:'short' })
 }
 
-function normalizeError(data:any,error:any):AiError {
-  if (data?.error?.message) return data.error
-  if (typeof data?.error === 'string') return { code:data.code || 'EDGE_ERROR', message:data.error, requestId:data.requestId }
-  if (error?.message) return { code:'NETWORK_ERROR', message:error.message }
-  return { code:'UNKNOWN', message:'Nova AI could not respond right now. Please try again.' }
+function normalizeError(data:any, error:any):AiError {
+  if (data?.error?.message) return { code: data.error.code || 'EDGE_ERROR', message: data.error.message, requestId: data.error.requestId || data.requestId, limitReached: data.limitReached }
+  if (typeof data?.error === 'string') return { code: data.code || 'EDGE_ERROR', message: data.error, requestId: data.requestId }
+  if (error?.message?.includes('auth') || error?.message?.includes('401') || error?.message?.includes('expired')) {
+    return { code: 'AUTH_EXPIRED', message: 'Your session has expired. Please sign in again.' }
+  }
+  if (error?.message) return { code: 'NETWORK_ERROR', message: error.message }
+  return { code: 'UNKNOWN', message: 'Nova AI could not respond right now. Please try again.' }
+}
+
+function friendlyErrorMessage(err: AiError): string {
+  switch (err.code) {
+    case 'AUTH_EXPIRED': return 'Your session expired. Please sign in again.'
+    case 'DAILY_LIMIT_REACHED': return err.message || 'You have reached the daily AI message limit.'
+    case 'RATE_LIMITED': return err.message || 'Please wait a moment before sending another message.'
+    case 'RATE_LIMITED_PROVIDER': return 'The AI service is busy. Please try again shortly.'
+    case 'AI_NOT_CONFIGURED': return 'Nova AI is not connected yet. Please contact support.'
+    case 'AI_SERVICE_NOT_CONFIGURED': return 'Nova AI is not configured on the server.'
+    case 'AI_REQUEST_FAILED': return 'Nova AI could not respond right now. Please try again.'
+    case 'NETWORK_ERROR': return 'Connection issue. Please check your internet and try again.'
+    case 'AUTH_REQUIRED': return 'Please sign in to use Nova AI.'
+    case 'MESSAGE_TOO_LONG': return err.message || 'Your message is too long.'
+    case 'CONVERSATION_NOT_FOUND': return 'Conversation not found. Try creating a new one.'
+    default: return err.message || 'Something went wrong. Please try again.'
+  }
 }
 
 export function AICompanion({ userId, onClose }:{ userId:string; onClose:()=>void }) {
@@ -79,6 +99,7 @@ export function AICompanion({ userId, onClose }:{ userId:string; onClose:()=>voi
   const [crisis,setCrisis]=useState(false)
   const [routeConversationId,setRouteConversationId]=useState(()=>hashConversationId())
   const [lastUserMessage,setLastUserMessage]=useState('')
+  const noticeRef=useRef<HTMLDivElement>(null)
   const bottom=useRef<HTMLDivElement>(null)
   const listRef=useRef<HTMLDivElement>(null)
   const nearBottom=()=>{const el=listRef.current;return !el||el.scrollHeight-el.scrollTop-el.clientHeight<110}
@@ -140,6 +161,9 @@ export function AICompanion({ userId, onClose }:{ userId:string; onClose:()=>voi
     return()=>{supabase.removeChannel(channel)}
   },[active,loadMessages,loadConversations])
   useEffect(()=>{if(nearBottom())bottom.current?.scrollIntoView({behavior:'smooth'})},[messages,sending])
+  useEffect(()=>{
+    if(notice && noticeRef.current) noticeRef.current.focus()
+  },[notice])
 
   const filtered=useMemo(()=>conversations.filter(c=>c.title.toLowerCase().includes(query.toLowerCase())),[conversations,query])
   const remaining=MAX_MESSAGE-draft.length
@@ -166,16 +190,21 @@ export function AICompanion({ userId, onClose }:{ userId:string; onClose:()=>voi
     if(!current) current=await createConversation(true)
     if(!current)return
     if(!body && !retryLast)return
-    if(body.length>MAX_MESSAGE){setNotice({code:'MESSAGE_TOO_LONG',message:`Please keep AI messages under ${MAX_MESSAGE.toLocaleString()} characters.`});return}
+    if(body.length>MAX_MESSAGE){setNotice({code:'MESSAGE_TOO_LONG',message:`Please keep messages under ${MAX_MESSAGE.toLocaleString()} characters.`});return}
     setSending(true);setNotice(null);setCrisis(false)
     if(!retryLast){
       setDraft('')
       setLastUserMessage(body)
       setMessages(items=>[...items,{id:tempId(),conversation_id:current.id,user_id:userId,role:'user',content:body,created_at:new Date().toISOString(),deleted_at:null}])
     }
-    const { data, error } = await supabase.functions.invoke('ai-chat', { body:{ conversationId:current.id, message:body, retryLast } })
+    const { data, error } = await supabase.functions.invoke('ai-companion', { body:{ conversationId:current.id, message:body, retryLast } })
     if(error || data?.error){
-      setNotice(normalizeError(data,error))
+      const normalized=normalizeError(data,error)
+      setNotice(normalized)
+      if(normalized.code==='AUTH_EXPIRED'){
+        setSending(false)
+        return
+      }
       await loadMessages(current.id,false)
       setSending(false)
       return
@@ -237,7 +266,7 @@ export function AICompanion({ userId, onClose }:{ userId:string; onClose:()=>voi
         <form className="ai-compose" onSubmit={submit}><textarea value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={handleKeyDown} maxLength={MAX_MESSAGE} placeholder="Write to Nova AI Companion..."/><button disabled={sending||!draft.trim()} aria-label="Send message"><Send size={16}/></button><small>{remaining.toLocaleString()} characters left</small></form>
         <div className="ai-notice"><ShieldCheck size={14}/> Nova AI can make mistakes and does not replace professional mental-health, medical, or emergency support.</div>
       </> : <div className="ai-starters"><div className="ai-hero"><div className="ai-avatar"><Bot/></div><h2>Nova AI Companion</h2><p>A private AI room for mindfulness, journaling, session preparation, and gentle reflection.</p></div><div className="starter-grid">{starters.map(starter=><button key={starter} disabled={creating||sending} onClick={()=>startFromPrompt(starter)}><MessageCircleMore size={16}/>{starter}</button>)}</div><div className="ai-privacy"><b>Privacy</b><p>AI conversations are private to you. Nova AI is not a verified healer and cannot access private messages, reports, blocked users, passwords, or unrelated personal data.</p></div></div>}
-      {notice&&<div className="ai-error"><b>{notice.code}</b><span>{notice.message}{notice.requestId?` (${notice.requestId})`:''}</span></div>}
+      {notice&&<div className="ai-error" role="alert" ref={noticeRef} tabIndex={-1}><b>{notice.code}</b><span>{friendlyErrorMessage(notice)}{notice.requestId?` (${notice.requestId.slice(0,8)})`:''}{notice.limitReached&&' Limit resets in 24 hours.'}</span><button className="ai-error-close" onClick={()=>setNotice(null)} aria-label="Dismiss error"><X size={12}/></button></div>}
     </main>
   </section></div>
 }
