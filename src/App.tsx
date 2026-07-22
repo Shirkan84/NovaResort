@@ -2,7 +2,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import {
   Bell, CalendarDays, ChevronDown, ChevronRight, CircleUserRound, Clock3,
   Compass, Heart, Home, Leaf, LockKeyhole, Menu, MessageCircleMore, MoreHorizontal,
-  Search, Send, Settings, ShieldCheck, Sparkles, UsersRound, Video, X, Moon, Sun, Languages, UserPlus, Headphones, Mic
+  Search, Send, Settings, ShieldCheck, Sparkles, UsersRound, Video, X, Moon, Sun, Languages, UserPlus, Headphones, Mic, MessageSquareWarning
 } from 'lucide-react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
@@ -11,6 +11,9 @@ import { PrivateChats, PrivateChatRoom } from './PrivateMessaging'
 import { DiscoverPeople, HealersDirectory } from './PeopleDiscovery'
 import { SessionsPage } from './SessionsEvents'
 import { HealerDashboard } from './HealerDashboard'
+import { FeedbackForm } from './FeedbackForm'
+import { FeedbackAdmin } from './FeedbackAdmin'
+import './feedback.css'
 import { PodcastPlatform, PodcastMiniPlayer, PopularPodcastsStrip, ProfilePodcastSection, PlayerEpisode } from './PodcastPlatform'
 import { getFeaturedHealers } from './services/healers'
 import { useUserRole } from './hooks/useUserRole'
@@ -24,7 +27,7 @@ type LiveProfile = { id:string;full_name:string;display_name:string|null;avatar_
 type RecentMessage = { id:string;body:string;created_at:string;profiles?:{full_name:string;avatar_url:string|null}|null;rooms?:{id:string;name:string}|null }
 type Friendship = { id:string; requester_id:string; addressee_id:string; status:string }
 type NextSession = { id:string; title:string; starts_at:string; host_id:string }
-type Feature = 'discover'|'people'|'healers'|'profile'|'notifications'|'messages'|'safety'|'connections'|'sessions'|'podcasts'|'healer'
+type Feature = 'discover'|'people'|'healers'|'profile'|'notifications'|'messages'|'safety'|'connections'|'sessions'|'podcasts'|'healer'|'feedback'|'feedback-admin'
 type AppRoute = { feature: Feature | null; roomId: string | null; profileId: string | null; podcastId: string | null; episodeId: string | null; podcastStudio: boolean; studioAction: string | null; studioPodcastId: string | null; studioEpisodeId: string | null; sessionId: string | null; sessionView: string | null; notFound: boolean }
 
 const BASE_URL = import.meta.env.VITE_BASE_URL || 'https://shirkan84.github.io/NovaResort/'
@@ -61,6 +64,8 @@ function routeFromHash(): AppRoute {
   if (value === 'connections') return { ...base, feature: 'connections' }
   if (value === 'messages') return { ...base, feature: 'messages' }
   if (value === 'healer' || value === 'healer/dashboard') return { ...base, feature: 'healer' }
+  if (value === 'feedback') return { ...base, feature: 'feedback' }
+  if (value === 'feedback/admin') return { ...base, feature: 'feedback-admin' }
   if (value.startsWith('sessions/')) {
     const parts = value.split('/')
     const sId = parts[1] || null
@@ -88,6 +93,8 @@ function navFromFeature(feature: Feature | null) {
   if (feature === 'people') return 'Community'
   if (feature === 'healers') return 'Healers'
   if (feature === 'healer') return 'Healer Dashboard'
+  if (feature === 'feedback') return 'Home'
+  if (feature === 'feedback-admin') return 'Home'
   if (feature === 'messages') return 'Messages'
   if (feature === 'connections') return 'Connections'
   if (feature === 'sessions') return 'Sessions'
@@ -532,6 +539,7 @@ function App() {
             <button className="healer-action" onClick={() => openPodcast('manage')}><Mic size={16}/> Create Podcast</button>
             <button className="healer-action" onClick={() => openFeature('sessions')}><Video size={16}/> Host a session</button>
           </>}
+          <button onClick={() => openFeature('feedback')}><MessageSquareWarning size={16}/> Send Feedback</button>
         </div>
 
         <div className="layout">
@@ -600,6 +608,8 @@ function App() {
     {feature==='healer' && <HealerDashboard userId={session.user.id} onOpenSession={(id)=>{closeOverlay();openFeature('sessions');setTimeout(()=>setRoute(`sessions/${id}`),50)}} onCreateSession={()=>{closeOverlay();openFeature('sessions');setTimeout(()=>setRoute('sessions'),100)}} onClose={closeOverlay}/>} 
     {feature==='notifications' && <Notifications userId={session.user.id} onClose={closeOverlay}/>} 
     {feature==='safety' && <SafetyCenter onClose={closeOverlay}/>} 
+    {feature==='feedback' && <FeedbackForm onClose={closeOverlay}/>} 
+    {feature==='feedback-admin' && <FeedbackAdmin onClose={closeOverlay}/>} 
     {profilePreview && <div className="feature-overlay"><section className="profile-window public-profile-window"><header><div><h2>{profileName(profilePreview)}</h2><p>{roleLabel(profilePreview)}{profilePreview.country?` · ${profilePreview.country}`:''}</p></div><button onClick={closeOverlay}><X/></button></header><div className="public-profile-body"><span className="avatar healer rose public-profile-avatar">{profilePreview.avatar_url?<img src={profilePreview.avatar_url} alt={`${profileName(profilePreview)} profile photo`} loading="lazy"/>:profileInitials(profileName(profilePreview))}<i className={profilePreview.online?'online':''}/></span><p>{profilePreview.about||'This member has not added an introduction yet.'}</p><div className="healer-tags">{[...(profilePreview.profile_type==='healer'?profilePreview.specialties||[]:[]),...(profilePreview.interests||[])].slice(0,6).map(tag=><span key={tag}>{tag}</span>)}</div><ProfilePreviewActions profile={profilePreview} friendships={friendships} userId={session.user.id} onConnect={connectWith} onMessage={startPrivateMessage} onSessions={()=>openFeature('sessions')} onCreatePodcast={()=>openPodcast('manage')} onCreateSession={()=>openFeature('sessions')}/></div></section></div>}
     {profilePreview && <div className="profile-podcast-sidecar"><ProfilePodcastSection profileId={profilePreview.id} onOpenPodcast={openPodcast}/></div>}
     <PodcastMiniPlayer episode={podcastPlayer} onClose={() => setPodcastPlayer(null)}/>
