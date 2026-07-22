@@ -65,6 +65,7 @@ function routeFromHash(): AppRoute {
     const parts = value.split('/')
     const sId = parts[1] || null
     if (parts[2] === 'room') return { ...base, feature: 'sessions', sessionId: sId, sessionView: 'room' }
+    if (parts[2] === 'chat') return { ...base, feature: 'sessions', sessionId: sId, sessionView: 'chat' }
     if (sId) return { ...base, feature: 'sessions', sessionId: sId, sessionView: 'detail' }
     return { ...base, feature: 'sessions' }
   }
