@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
-import { CalendarDays, Clock3, Globe, MapPin, Mic, MicOff, Monitor, Plus, Search, Send, Users, Video, VideoOff, X, ChevronRight, Circle, CircleDot, Pencil, Trash2, Pin, PinOff, UserX, MoreVertical } from 'lucide-react'
+import { CalendarDays, Clock3, Globe, MapPin, Mic, MicOff, Monitor, Plus, Search, Send, Users, Video, VideoOff, X, ChevronRight, ChevronLeft, Circle, CircleDot, Pencil, Trash2, Pin, PinOff, UserX, Image, Check } from 'lucide-react'
 import { supabase } from './supabase'
-import { createLiveRoomProvider, destroyLiveRoomProvider, type LiveRoomProvider, type LiveRoomParticipant, type LiveRoomChatMessage } from './services/liveroom'
+import { createLiveRoomProvider, type LiveRoomProvider, type LiveRoomParticipant } from './services/liveroom'
 import './sessions-events.css'
 
 type SessionRow = {
@@ -14,12 +14,6 @@ type SessionRow = {
   profiles?:{full_name:string;display_name:string|null;avatar_url:string|null;profile_type:string;specialties:string[]}|null;
   session_registrations?:{status:string;user_id:string}[];
   session_room_state?:{status:string;started_at:string|null;ended_at:string|null}|null;
-}
-
-type RoomParticipant = {
-  user_id:string; role:string; is_muted:boolean; is_video_on:boolean; is_screen_sharing:boolean;
-  joined_at:string; left_at:string|null;
-  profiles?:{full_name:string;display_name:string|null;avatar_url:string|null}|null;
 }
 
 type ChatMsg = {
@@ -46,6 +40,7 @@ export function SessionsPage({userId,isHealer,onClose,initialSessionId,initialSe
   const [error,setError]=useState('')
   const [detailId,setDetailId]=useState<string|null>(null)
   const [liveSessionId,setLiveSessionId]=useState<string|null>(null)
+  const [editingId,setEditingId]=useState<string|null>(null)
 
   useEffect(()=>{
     if(initialSessionId&&initialSessionView==='room')setLiveSessionId(initialSessionId)
@@ -72,18 +67,21 @@ export function SessionsPage({userId,isHealer,onClose,initialSessionId,initialSe
     const starts=new Date(String(fd.get('starts_at'))), ends=new Date(String(fd.get('ends_at')))
     if(starts<=new Date()){setError('Start time must be in the future.');return}
     if(ends<=starts){setError('End time must be after the start time.');return}
-    const row={host_id:userId,title:String(fd.get('title')).trim(),description:String(fd.get('description')).trim(),category:String(fd.get('category')),language:String(fd.get('language')||'English'),starts_at:starts.toISOString(),ends_at:ends.toISOString(),timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,capacity:Number(fd.get('capacity')||20),visibility:String(fd.get('visibility')||'public'),registration_deadline:fd.get('registration_deadline')?new Date(String(fd.get('registration_deadline'))).toISOString():null,chat_enabled:Boolean(fd.get('chat_enabled')),participant_audio_enabled:true,participant_video_enabled:true,session_type:String(fd.get('session_type')||'online'),price:Number(fd.get('price')||0),currency:'USD',location:String(fd.get('location')||'')||null,meeting_url:String(fd.get('meeting_url')||'')||null}
+    const row={host_id:userId,title:String(fd.get('title')).trim(),description:String(fd.get('description')).trim(),category:String(fd.get('category')),language:String(fd.get('language')||'English'),starts_at:starts.toISOString(),ends_at:ends.toISOString(),timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,capacity:Number(fd.get('capacity')||20),visibility:String(fd.get('visibility')||'public'),registration_deadline:fd.get('registration_deadline')?new Date(String(fd.get('registration_deadline'))).toISOString():null,chat_enabled:true,participant_audio_enabled:true,participant_video_enabled:true,session_type:String(fd.get('session_type')||'online'),price:Number(fd.get('price')||0),currency:'USD',location:String(fd.get('location')||'')||null,meeting_url:String(fd.get('meeting_url')||'')||null}
     const {error}=await supabase.from('sessions').insert(row)
     if(error)setError(error.message);else{setShowCreate(false);load()}
+  }
+
+  async function updateSession(id:string,updates:Partial<SessionRow>){
+    const {error}=await supabase.from('sessions').update(updates).eq('id',id)
+    if(error)alert(error.message);else{setEditingId(null);load()}
   }
 
   async function register(s:SessionRow){
     const current=mine.find(x=>x.session_id===s.id)
     const {error}=current?await supabase.rpc('cancel_session_registration',{target_session:s.id}):await supabase.rpc('register_for_session',{target_session:s.id})
     if(error)alert(error.message);else{
-      if(!current){
-        await supabase.rpc('notify_session_event',{target_session:s.id,event_type:'registration_confirmed',target_user:userId})
-      }
+      if(!current)await supabase.rpc('notify_session_event',{target_session:s.id,event_type:'registration_confirmed',target_user:userId})
       load()
     }
   }
@@ -92,6 +90,14 @@ export function SessionsPage({userId,isHealer,onClose,initialSessionId,initialSe
     if(!confirm('Cancel this session? All registered participants will be notified.'))return
     const {error}=await supabase.rpc('cancel_session',{target_session:s.id})
     if(error)alert(error.message);else load()
+  }
+
+  async function uploadCover(sessionId:string,file:File){
+    const path=`${userId}/${sessionId}/cover.jpg`
+    const {error}=await supabase.storage.from('session-covers').upload(path,file,{upsert:true})
+    if(error){alert(error.message);return}
+    const {data}=supabase.storage.from('session-covers').getPublicUrl(path)
+    await updateSession(sessionId,{cover_image_url:data.publicUrl})
   }
 
   const now=Date.now()
@@ -104,9 +110,14 @@ export function SessionsPage({userId,isHealer,onClose,initialSessionId,initialSe
     return new Date(s.ends_at).getTime()>=now&&s.status!=='cancelled'&&s.session_room_state?.status!=='live'
   })
 
+  if(editingId){
+    const session=items.find(s=>s.id===editingId)
+    if(session)return <EditSessionForm session={session} onSaved={()=>{setEditingId(null);load()}} onCancel={()=>setEditingId(null)}/>
+  }
+
   if(detailId){
     const session=items.find(s=>s.id===detailId)
-    if(session)return <SessionDetail session={session} userId={userId} isHealer={isHealer} mine={mine} onBack={()=>setDetailId(null)} onJoinRoom={(id)=>{setDetailId(null);setLiveSessionId(id)}} onRegister={register} onCancelSession={cancelSession} load={load}/>
+    if(session)return <SessionDetail session={session} userId={userId} isHealer={isHealer} mine={mine} onBack={()=>setDetailId(null)} onJoinRoom={(id)=>{setDetailId(null);setLiveSessionId(id)}} onRegister={register} onCancelSession={cancelSession} onEdit={(id)=>{setDetailId(null);setEditingId(id)}} onUploadCover={uploadCover} load={load}/>
   }
 
   if(liveSessionId){
@@ -114,7 +125,7 @@ export function SessionsPage({userId,isHealer,onClose,initialSessionId,initialSe
     if(session)return <LiveRoom session={session} userId={userId} isHost={session.host_id===userId} onClose={()=>{setLiveSessionId(null);load()}}/>
   }
 
-  return <div className="feature-overlay"><section className="sessions-window"><header><div><h2>Sessions</h2><p>Events, workshops, guided practices, and community gatherings.</p></div>{isHealer?<button className="create-session" onClick={()=>setShowCreate(true)}><Plus/> Create session</button>:null}<button onClick={onClose}><X/></button></header><div className="session-tabs">{(['upcoming','live','registered','hosting','past'] as const).map(t=><button key={t} className={tab===t?'active':''} onClick={()=>setTab(t)}>{t[0].toUpperCase()+t.slice(1)}</button>)}</div><label className="session-search"><Search size={15}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search by title, host, category, or language"/></label>{showCreate&&<CreateSessionForm userId={userId} onCreated={()=>{setShowCreate(false);load()}} onCancel={()=>setShowCreate(false)}/>}{error&&<div className="session-error">{error}<button onClick={()=>setError('')}>×</button></div>}{loading?<div className="session-loading">Loading sessions…</div>:visible.length===0?<div className="session-empty"><CalendarDays size={28}/><p>{tab==='live'?'No live sessions right now.':tab==='past'?'No past sessions.':tab==='registered'?'You have not registered for any sessions.':tab==='hosting'?'You are not hosting any sessions.':query?'No sessions match your search.':'No upcoming sessions.'}</p></div>:<div className="session-grid">{visible.map(s=>{const isHost=s.host_id===userId;const reg=mine.find(r=>r.session_id===s.id);const isLive=s.session_room_state?.status==='live';return <article className={`session-card ${isLive?'live':''}`} key={s.id} onClick={()=>setDetailId(s.id)}><div className={`session-cover ${isLive?'live-cover':''}`}><div className="session-cover-top"><Video size={22}/><div className="session-cover-labels"><span className="session-type-badge">{s.session_type==='in_person'?'In Person':s.session_type==='hybrid'?'Hybrid':'Online'}</span>{isLive&&<span className="live-badge"><CircleDot size={10}/> LIVE</span>}</div></div><span className="session-category-tag">{s.category}</span></div><div className="session-body"><div className="session-host"><span>{s.profiles?.avatar_url?<img src={s.profiles.avatar_url} alt=""/>:initials(s.profiles?.display_name||s.profiles?.full_name)}</span><div><b>{s.profiles?.display_name||s.profiles?.full_name||'Host'}</b><small>{isHost?'You':'Healer'}</small></div></div><h3>{s.title}</h3><p>{s.description.slice(0,120)}{s.description.length>120?'…':''}</p><div className="session-meta"><span><CalendarDays size={12}/> {fmtDate(s.starts_at)}</span><span><Clock3 size={12}/> {fmtTime(s.starts_at)} – {fmtTime(s.ends_at)}</span><span>{duration(s.starts_at,s.ends_at)}</span><span><Users size={12}/> {s.capacity} spots</span>{s.price>0&&<span>${s.price}</span>}</div><div className="session-actions">{isLive&&<button className="join-live-btn" onClick={(e)=>{e.stopPropagation();setDetailId(s.id)}}><CircleDot size={14}/> Join Live</button>}{!isHost&&!reg&&<button onClick={(e)=>{e.stopPropagation();register(s)}}>Register</button>}{!isHost&&reg&&<button className="registered-btn" onClick={(e)=>{e.stopPropagation();register(s)}}>Cancel</button>}{isHost&&<button onClick={(e)=>{e.stopPropagation();setDetailId(s.id)}}>Manage</button>}</div></div></article>})}</div>}</section></div>
+  return <div className="feature-overlay"><section className="sessions-window"><header><div><h2>Sessions</h2><p>Events, workshops, guided practices, and community gatherings.</p></div>{isHealer?<button className="create-session" onClick={()=>setShowCreate(true)}><Plus/> Create session</button>:null}<button onClick={onClose}><X/></button></header><div className="session-tabs">{(['upcoming','live','registered','hosting','past'] as const).map(t=><button key={t} className={tab===t?'active':''} onClick={()=>setTab(t)}>{t[0].toUpperCase()+t.slice(1)}</button>)}</div><label className="session-search"><Search size={15}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search by title, host, category, or language"/></label>{showCreate&&<CreateSessionForm userId={userId} onCreated={()=>{setShowCreate(false);load()}} onCancel={()=>setShowCreate(false)}/>}{error&&<div className="session-error">{error}<button onClick={()=>setError('')}>×</button></div>}{loading?<div className="session-loading">Loading sessions…</div>:visible.length===0?<div className="session-empty"><CalendarDays size={28}/><p>{tab==='live'?'No live sessions right now.':tab==='past'?'No past sessions.':tab==='registered'?'You have not registered for any sessions.':tab==='hosting'?'You are not hosting any sessions.':query?'No sessions match your search.':'No upcoming sessions.'}</p></div>:<div className="session-grid">{visible.map(s=>{const isHost=s.host_id===userId;const reg=mine.find(r=>r.session_id===s.id);const isLive=s.session_room_state?.status==='live';return <article className={`session-card ${isLive?'live':''}`} key={s.id} onClick={()=>setDetailId(s.id)}><div className={`session-cover ${isLive?'live-cover':''}`} style={s.cover_image_url?{backgroundImage:`url(${s.cover_image_url})`,backgroundSize:'cover',backgroundPosition:'center'}:undefined}><div className="session-cover-top"><Video size={22}/><div className="session-cover-labels"><span className="session-type-badge">{s.session_type==='in_person'?'In Person':s.session_type==='hybrid'?'Hybrid':'Online'}</span>{isLive&&<span className="live-badge"><CircleDot size={10}/> LIVE</span>}</div></div><span className="session-category-tag">{s.category}</span></div><div className="session-body"><div className="session-host"><span>{s.profiles?.avatar_url?<img src={s.profiles.avatar_url} alt=""/>:initials(s.profiles?.display_name||s.profiles?.full_name)}</span><div><b>{s.profiles?.display_name||s.profiles?.full_name||'Host'}</b><small>{isHost?'You':'Healer'}</small></div></div><h3>{s.title}</h3><p>{s.description.slice(0,120)}{s.description.length>120?'…':''}</p><div className="session-meta"><span><CalendarDays size={12}/> {fmtDate(s.starts_at)}</span><span><Clock3 size={12}/> {fmtTime(s.starts_at)} – {fmtTime(s.ends_at)}</span><span>{duration(s.starts_at,s.ends_at)}</span><span><Users size={12}/> {s.capacity} spots</span>{s.price>0&&<span>${s.price}</span>}</div><div className="session-actions">{isLive&&<button className="join-live-btn" onClick={(e)=>{e.stopPropagation();setDetailId(s.id)}}><CircleDot size={14}/> Join Live</button>}{!isHost&&!reg&&<button onClick={(e)=>{e.stopPropagation();register(s)}}>Register</button>}{!isHost&&reg&&<button className="registered-btn" onClick={(e)=>{e.stopPropagation();register(s)}}>Cancel</button>}{isHost&&<button onClick={(e)=>{e.stopPropagation();setDetailId(s.id)}}>Manage</button>}</div></div></article>})}</div>}</section></div>
 }
 
 function CreateSessionForm({userId,onCreated,onCancel}:{userId:string;onCreated:()=>void;onCancel:()=>void}){
@@ -131,13 +142,29 @@ function CreateSessionForm({userId,onCreated,onCancel}:{userId:string;onCreated:
   return <form className="session-form" onSubmit={handle}><div className="form-row"><label>Title<input name="title" required minLength={3} placeholder="Session title"/></label><label>Category<select name="category">{categories.map(c=><option key={c}>{c}</option>)}</select></label></div><label>Description<textarea name="description" required placeholder="What will people experience?"/></label><div className="form-row"><label>Start<input type="datetime-local" name="starts_at" required defaultValue={localValue(new Date(Date.now()+86400000))}/></label><label>End<input type="datetime-local" name="ends_at" required defaultValue={localValue(new Date(Date.now()+90000000))}/></label></div><div className="form-row"><label>Timezone<input name="timezone" defaultValue={Intl.DateTimeFormat().resolvedOptions().timeZone} readOnly/></label><label>Capacity<input name="capacity" type="number" min={1} defaultValue={20}/></label></div><div className="form-row"><label>Session type<select name="session_type"><option value="online">Online</option><option value="in_person">In Person</option><option value="hybrid">Hybrid</option></select></label><label>Price (0 = free)<input name="price" type="number" min={0} step="0.01" defaultValue={0}/></label></div><div className="form-row"><label>Location (optional)<input name="location" placeholder="Physical location"/></label><label>Meeting URL (optional)<input name="meeting_url" placeholder="https://…"/></label></div><div className="form-row"><label>Visibility<select name="visibility"><option value="public">Public</option><option value="private">Private</option></select></label><label>Registration deadline<input type="datetime-local" name="registration_deadline"/></label></div><div className="form-row"><label>Language<input name="language" defaultValue="English"/></label><span/></div>{error&&<div className="session-form-error">{error}</div>}<div className="form-actions"><button type="button" onClick={onCancel}>Cancel</button><button type="submit" className="primary">Create session</button></div></form>
 }
 
-function SessionDetail({session,userId,isHealer,mine,onBack,onJoinRoom,onRegister,onCancelSession,load}:{session:SessionRow;userId:string;isHealer:boolean;mine:{session_id:string;status:string}[];onBack:()=>void;onJoinRoom:(id:string)=>void;onRegister:(s:SessionRow)=>void;onCancelSession:(s:SessionRow)=>void;load:()=>void}){
+function EditSessionForm({session,onSaved,onCancel}:{session:SessionRow;onSaved:()=>void;onCancel:()=>void}){
+  const [error,setError]=useState('')
+  async function handle(e:FormEvent<HTMLFormElement>){
+    e.preventDefault();const fd=new FormData(e.currentTarget)
+    const starts=new Date(String(fd.get('starts_at'))),ends=new Date(String(fd.get('ends_at')))
+    if(ends<=starts){setError('End time must be after the start time.');return}
+    const updates={title:String(fd.get('title')).trim(),description:String(fd.get('description')).trim(),category:String(fd.get('category')),language:String(fd.get('language')||'English'),starts_at:starts.toISOString(),ends_at:ends.toISOString(),capacity:Number(fd.get('capacity')||20),visibility:String(fd.get('visibility')||'public'),registration_deadline:fd.get('registration_deadline')?new Date(String(fd.get('registration_deadline'))).toISOString():null,session_type:String(fd.get('session_type')||'online'),price:Number(fd.get('price')||0),location:String(fd.get('location')||'')||null,meeting_url:String(fd.get('meeting_url')||'')||null}
+    const {error}=await supabase.from('sessions').update(updates).eq('id',session.id)
+    if(error)setError(error.message);else onSaved()
+  }
+  return <div className="feature-overlay"><section className="sessions-window"><header><button className="back-btn" onClick={onCancel}><ChevronRight size={18} style={{transform:'rotate(180deg)'}}/> Cancel</button><div><h2>Edit Session</h2><p>Update your session details.</p></div></header><form className="session-form" onSubmit={handle} style={{margin:'16px 20px'}}><div className="form-row"><label>Title<input name="title" required minLength={3} defaultValue={session.title}/></label><label>Category<select name="category" defaultValue={session.category}>{categories.map(c=><option key={c}>{c}</option>)}</select></label></div><label>Description<textarea name="description" required defaultValue={session.description}/></label><div className="form-row"><label>Start<input type="datetime-local" name="starts_at" required defaultValue={localValue(new Date(session.starts_at))}/></label><label>End<input type="datetime-local" name="ends_at" required defaultValue={localValue(new Date(session.ends_at))}/></label></div><div className="form-row"><label>Capacity<input name="capacity" type="number" min={1} defaultValue={session.capacity}/></label><label>Session type<select name="session_type" defaultValue={session.session_type}><option value="online">Online</option><option value="in_person">In Person</option><option value="hybrid">Hybrid</option></select></label></div><div className="form-row"><label>Price (0 = free)<input name="price" type="number" min={0} step="0.01" defaultValue={session.price}/></label><label>Visibility<select name="visibility" defaultValue={session.visibility}><option value="public">Public</option><option value="private">Private</option></select></label></div><div className="form-row"><label>Location (optional)<input name="location" defaultValue={session.location||''} placeholder="Physical location"/></label><label>Meeting URL (optional)<input name="meeting_url" defaultValue={session.meeting_url||''} placeholder="https://…"/></label></div><div className="form-row"><label>Language<input name="language" defaultValue={session.language}/></label><label>Registration deadline<input type="datetime-local" name="registration_deadline" defaultValue={session.registration_deadline?localValue(new Date(session.registration_deadline)):''}/></label></div>{error&&<div className="session-form-error">{error}</div>}<div className="form-actions"><button type="button" onClick={onCancel}>Cancel</button><button type="submit" className="primary">Save changes</button></div></form></section></div>
+}
+
+function SessionDetail({session,userId,isHealer,mine,onBack,onJoinRoom,onRegister,onCancelSession,onEdit,onUploadCover,load}:{session:SessionRow;userId:string;isHealer:boolean;mine:{session_id:string;status:string}[];onBack:()=>void;onJoinRoom:(id:string)=>void;onRegister:(s:SessionRow)=>void;onCancelSession:(s:SessionRow)=>void;onEdit:(id:string)=>void;onUploadCover:(sessionId:string,file:File)=>void;load:()=>void}){
   const isHost=session.host_id===userId
   const reg=mine.find(r=>r.session_id===session.id)
   const isLive=session.session_room_state?.status==='live'
   const isEnded=session.status==='completed'||session.status==='cancelled'||(session.session_room_state?.status==='ended')
   const isBeforeStart=new Date(session.starts_at).getTime()>Date.now()
   const [countdown,setCountdown]=useState('')
+  const [participants,setParticipants]=useState<{status:string;user_id:string;id:string}[]>([])
+  const [attendance,setAttendance]=useState<Record<string,boolean>>({})
+  const [coverFile,setCoverFile]=useState<File|null>(null)
 
   useEffect(()=>{
     if(!isBeforeStart||isLive)return
@@ -146,18 +173,28 @@ function SessionDetail({session,userId,isHealer,mine,onBack,onJoinRoom,onRegiste
     return()=>clearInterval(id)
   },[session.starts_at,isBeforeStart,isLive])
 
-  const [participants,setParticipants]=useState<{status:string;user_id:string}[]>([])
   useEffect(()=>{
-    if(!isHost)return
-    supabase.from('session_registrations').select('status,user_id').eq('session_id',session.id).in('status',['registered','waitlisted']).then(({data})=>setParticipants(data||[]))
-  },[session.id,isHost])
+    supabase.from('session_registrations').select('status,user_id,id').eq('session_id',session.id).in('status',['registered','waitlisted','attended']).then(({data})=>{
+      if(data){setParticipants(data);const att:Record<string,boolean>={};data.forEach((r:any)=>{if(r.status==='attended')att[r.user_id]=true});setAttendance(att)}
+    })
+  },[session.id])
 
-  return <div className="feature-overlay"><section className="sessions-window session-detail"><header><button className="back-btn" onClick={onBack}><ChevronRight size={18} style={{transform:'rotate(180deg)'}}/> Back</button><div><h2>{session.title}</h2><p>{session.category} · {session.language}</p></div>{isHost&&<button onClick={()=>onCancelSession(session)} className="cancel-btn"><Trash2 size={14}/></button>}</header><div className="detail-body"><div className="detail-main"><div className={`detail-cover ${isLive?'live-cover':''}`}><div className="detail-cover-content"><Video size={36}/>{isLive&&<span className="live-badge lg"><CircleDot size={14}/> LIVE</span>}</div></div><div className="detail-info"><h3>{session.title}</h3><p className="detail-desc">{session.description}</p><div className="detail-meta-grid"><div className="detail-meta-item"><CalendarDays size={16}/><div><span>Date</span><b>{fmtDate(session.starts_at)}</b></div></div><div className="detail-meta-item"><Clock3 size={16}/><div><span>Time</span><b>{fmtTime(session.starts_at)} – {fmtTime(session.ends_at)}</b></div></div><div className="detail-meta-item"><Globe size={16}/><div><span>Duration</span><b>{duration(session.starts_at,session.ends_at)}</b></div></div><div className="detail-meta-item"><Users size={16}/><div><span>Capacity</span><b>{session.capacity} participants</b></div></div>{session.session_type!=='online'&&<div className="detail-meta-item"><MapPin size={16}/><div><span>Location</span><b>{session.location||'TBD'}</b></div></div>}{session.price>0&&<div className="detail-meta-item"><span className="price-tag">${session.price} {session.currency}</span></div>}</div></div></div><div className="detail-sidebar"><div className="detail-host-card"><div className="session-host lg"><span>{session.profiles?.avatar_url?<img src={session.profiles.avatar_url} alt=""/>:initials(session.profiles?.display_name||session.profiles?.full_name)}</span><div><b>{session.profiles?.display_name||session.profiles?.full_name||'Host'}</b><small>Session host</small></div></div></div>{isBeforeStart&&!isLive&&!isEnded&&<div className="detail-countdown"><Clock3 size={20}/><span>Starts in {countdown||timeUntil(session.starts_at)}</span></div>}{isLive&&<button className="join-session-btn lg" onClick={()=>onJoinRoom(session.id)}><Video size={18}/> Join Session</button>}{isEnded&&<div className="detail-ended">This session has ended.</div>}{!isHost&&!reg&&!isEnded&&<button className="join-session-btn" onClick={()=>onRegister(session)}>Register for this session</button>}{!isHost&&reg&&!isEnded&&<button className="join-session-btn registered" onClick={()=>onRegister(session)}>Cancel registration</button>}{isHost&&isLive&&<button className="join-session-btn host-join" onClick={()=>onJoinRoom(session.id)}><Video size={18}/> Open as Host</button>}{isHost&&!isLive&&!isEnded&&<div className="host-info">You are the host. The room will open automatically at the scheduled time. You may enter 15 minutes early.</div>}{isHost&&participants.length>0&&<div className="detail-participants"><h4>Registered ({participants.length})</h4>{participants.map(p=><div key={p.user_id} className="participant-row"><span className="participant-status {p.status}">{p.status}</span></div>)}</div>}</div></div></section></div>
+  async function markAttendance(uid:string,attended:boolean){
+    const newStatus=attended?'attended':'registered'
+    const {error}=await supabase.from('session_registrations').update({status:newStatus}).eq('session_id',session.id).eq('user_id',uid)
+    if(!error)setAttendance(prev=>({...prev,[uid]:attended}))
+  }
+
+  function handleCoverChange(e:React.ChangeEvent<HTMLInputElement>){
+    const file=e.target.files?.[0]
+    if(file){setCoverFile(file);onUploadCover(session.id,file)}
+  }
+
+  return <div className="feature-overlay"><section className="sessions-window session-detail"><header><button className="back-btn" onClick={onBack}><ChevronRight size={18} style={{transform:'rotate(180deg)'}}/> Back</button><div><h2>{session.title}</h2><p>{session.category} · {session.language}</p></div>{isHost&&<div className="detail-header-actions"><button onClick={()=>onEdit(session.id)} className="edit-btn"><Pencil size={14}/></button><button onClick={()=>onCancelSession(session)} className="cancel-btn"><Trash2 size={14}/></button></div>}</header><div className="detail-body"><div className="detail-main"><div className={`detail-cover ${isLive?'live-cover':''}`} style={session.cover_image_url?{backgroundImage:`url(${session.cover_image_url})`,backgroundSize:'cover',backgroundPosition:'center'}:undefined}><div className="detail-cover-content"><Video size={36}/>{isLive&&<span className="live-badge lg"><CircleDot size={14}/> LIVE</span>}{isHost&&!session.cover_image_url&&<label className="cover-upload-btn"><Image size={14}/> Upload cover<input type="file" accept="image/*" onChange={handleCoverChange} hidden/></label>}</div></div><div className="detail-info"><h3>{session.title}</h3><p className="detail-desc">{session.description}</p><div className="detail-meta-grid"><div className="detail-meta-item"><CalendarDays size={16}/><div><span>Date</span><b>{fmtDate(session.starts_at)}</b></div></div><div className="detail-meta-item"><Clock3 size={16}/><div><span>Time</span><b>{fmtTime(session.starts_at)} – {fmtTime(session.ends_at)}</b></div></div><div className="detail-meta-item"><Globe size={16}/><div><span>Duration</span><b>{duration(session.starts_at,session.ends_at)}</b></div></div><div className="detail-meta-item"><Users size={16}/><div><span>Capacity</span><b>{session.capacity} participants</b></div></div>{session.session_type!=='online'&&<div className="detail-meta-item"><MapPin size={16}/><div><span>Location</span><b>{session.location||'TBD'}</b></div></div>}{session.price>0&&<div className="detail-meta-item"><span className="price-tag">${session.price} {session.currency}</span></div>}</div></div></div><div className="detail-sidebar"><div className="detail-host-card"><div className="session-host lg"><span>{session.profiles?.avatar_url?<img src={session.profiles.avatar_url} alt=""/>:initials(session.profiles?.display_name||session.profiles?.full_name)}</span><div><b>{session.profiles?.display_name||session.profiles?.full_name||'Host'}</b><small>Session host</small></div></div></div>{isBeforeStart&&!isLive&&!isEnded&&<div className="detail-countdown"><Clock3 size={20}/><span>Starts in {countdown||timeUntil(session.starts_at)}</span></div>}{isLive&&<button className="join-session-btn lg" onClick={()=>onJoinRoom(session.id)}><Video size={18}/> Join Session</button>}{isEnded&&<div className="detail-ended">This session has ended.</div>}{!isHost&&!reg&&!isEnded&&<button className="join-session-btn" onClick={()=>onRegister(session)}>Register for this session</button>}{!isHost&&reg&&!isEnded&&<button className="join-session-btn registered" onClick={()=>onRegister(session)}>Cancel registration</button>}{isHost&&isLive&&<button className="join-session-btn host-join" onClick={()=>onJoinRoom(session.id)}><Video size={18}/> Open as Host</button>}{isHost&&!isLive&&!isEnded&&<div className="host-info">You are the host. The room will open automatically at the scheduled time. You may enter 15 minutes early.</div>}{isHost&&participants.length>0&&<div className="detail-participants"><h4>Registered ({participants.length})</h4>{participants.map(p=>{const profileName=p.user_id.slice(0,8);return <div key={p.user_id} className="participant-row"><span className={`participant-status ${attendance[p.user_id]?'attended':p.status}`}>{attendance[p.user_id]?'attended':p.status}</span><span className="participant-id">{profileName}…</span>{isEnded&&<button className="attendance-toggle" onClick={()=>markAttendance(p.user_id,!attendance[p.user_id])}>{attendance[p.user_id]?<Check size={12}/>:<Check size={12}/>} {attendance[p.user_id]?'Attended':'Mark'}</button>}</div>})}</div>}</div></div></section></div>
 }
 
 function LiveRoom({session,userId,isHost,onClose}:{session:SessionRow;userId:string;isHost:boolean;onClose:()=>void}){
   const providerRef=useRef<LiveRoomProvider|null>(null)
-  const [joined,setJoined]=useState(false)
   const [isMuted,setIsMuted]=useState(false)
   const [isVideoOn,setIsVideoOn]=useState(true)
   const [isScreenSharing,setIsScreenSharing]=useState(false)
@@ -166,14 +203,16 @@ function LiveRoom({session,userId,isHost,onClose}:{session:SessionRow;userId:str
   const [chatMessages,setChatMessages]=useState<ChatMsg[]>([])
   const [chatInput,setChatInput]=useState('')
   const [showChat,setShowChat]=useState(true)
+  const [showMobileChat,setShowMobileChat]=useState(false)
   const [showParticipants,setShowParticipants]=useState(false)
   const [pinnedMsg,setPinnedMsg]=useState<ChatMsg|null>(null)
   const [participantProfiles,setParticipantProfiles]=useState<Record<string,{full_name:string;display_name:string|null;avatar_url:string|null}>>({})
-  const videoRef=useRef<HTMLVideoElement>(null)
-  const chatEndRef=useRef<HTMLDivElement>(null)
+  const [chatOffset,setChatOffset]=useState(200)
+  const [hasMoreChat,setHasMoreChat]=useState(true)
   const localVideoRef=useRef<HTMLVideoElement>(null)
+  const chatEndRef=useRef<HTMLDivElement>(null)
+  const chatListRef=useRef<HTMLDivElement>(null)
 
-  // Load participant profiles
   const loadProfiles=useCallback(async(userIds:string[])=>{
     if(userIds.length===0)return
     const {data}=await supabase.from('profiles').select('id,full_name,display_name,avatar_url').in('id',userIds)
@@ -186,6 +225,19 @@ function LiveRoom({session,userId,isHost,onClose}:{session:SessionRow;userId:str
       if(data){setChatMessages(data as unknown as ChatMsg[]);loadProfiles(data.map((m:any)=>m.user_id))}
     })
   },[session.id,loadProfiles])
+
+  // Load more chat messages
+  async function loadMoreChat(){
+    if(!hasMoreChat||chatMessages.length===0)return
+    const oldest=chatMessages[0]
+    const {data}=await supabase.from('session_chat_messages').select('id,user_id,body,pinned,created_at,profiles:profiles!session_chat_messages_user_id_fkey(full_name,display_name,avatar_url)').eq('session_id',session.id).lt('created_at',oldest.created_at).order('created_at',{ascending:false}).limit(50)
+    if(data&&data.length>0){
+      const older=data.reverse() as unknown as ChatMsg[]
+      setChatMessages(prev=>[...older,...prev])
+      if(data.length<50)setHasMoreChat(false)
+      loadProfiles(older.map(m=>m.user_id))
+    }else setHasMoreChat(false)
+  }
 
   // Load existing participants
   useEffect(()=>{
@@ -210,10 +262,8 @@ function LiveRoom({session,userId,isHost,onClose}:{session:SessionRow;userId:str
       onError:(err)=>console.error('LiveRoom error:',err)
     })
     provider.init(session.id,userId,isHost).then(()=>provider.join()).then(()=>{
-      setJoined(true)
       const local=provider.getLocalState()
       setIsMuted(local.isMuted);setIsVideoOn(local.isVideoOn)
-      // Attach local stream to video element
       const mockProvider=provider as any
       if(mockProvider.getLocalStream&&localVideoRef.current){
         localVideoRef.current.srcObject=mockProvider.getLocalStream()
@@ -222,7 +272,6 @@ function LiveRoom({session,userId,isHost,onClose}:{session:SessionRow;userId:str
     return()=>{provider.destroy();providerRef.current=null}
   },[session.id,userId,isHost,session.live_room_provider,loadProfiles,onClose])
 
-  // Auto-scroll chat
   useEffect(()=>{chatEndRef.current?.scrollIntoView({behavior:'smooth'})},[chatMessages])
 
   async function sendMsg(){
@@ -251,7 +300,6 @@ function LiveRoom({session,userId,isHost,onClose}:{session:SessionRow;userId:str
     const {error}=await supabase.rpc('start_session_room',{target_session:session.id})
     if(error){alert(error.message);return}
     setRoomStatus('live')
-    // Notify all participants
     const {data:regs}=await supabase.from('session_registrations').select('user_id').eq('session_id',session.id).in('status',['registered','waitlisted'])
     if(regs){for(const r of regs){await supabase.rpc('notify_session_event',{target_session:session.id,event_type:'host_started',target_user:r.user_id})}}
   }
@@ -282,8 +330,9 @@ function LiveRoom({session,userId,isHost,onClose}:{session:SessionRow;userId:str
 
   const hostParticipant=participants.find(p=>p.role==='host')
   const otherParticipants=participants.filter(p=>p.userId!==userId&&!p.leftAt)
+  const isJitsi=session.live_room_provider==='jitsi'
 
-  return <div className="live-room-overlay"><div className="live-room"><div className="live-room-header"><div className="live-room-title"><CircleDot size={14} className={roomStatus==='live'?'pulse':''}/><span>{session.title}</span>{roomStatus==='live'&&<span className="live-tag">LIVE</span>}{roomStatus==='waiting'&&<span className="waiting-tag">Waiting to start…</span>}{roomStatus==='ended'&&<span className="ended-tag">Ended</span>}</div><div className="live-room-header-right"><span className="participant-count"><Users size={14}/> {otherParticipants.length+1}</span>{isHost&&roomStatus==='waiting'&&<button className="start-session-btn" onClick={startSession}><CircleDot size={14}/> Start session</button>}{isHost&&roomStatus==='live'&&<button className="end-session-btn" onClick={endSession}><X size={14}/> End</button>}<button className="leave-btn" onClick={()=>{providerRef.current?.leave();onClose()}}><X size={16}/></button></div></div>{pinnedMsg&&<div className="pinned-banner"><Pin size={12}/><span><b>{participantProfiles[pinnedMsg.user_id]?.display_name||participantProfiles[pinnedMsg.user_id]?.full_name||'User'}:</b> {pinnedMsg.body}</span></div>}<div className="live-room-body"><div className="video-area"><div className="video-grid"><div className={`video-tile local ${isVideoOn?'':'no-video'}`}><video ref={localVideoRef} autoPlay muted playsInline className="local-video"/>{!isVideoOn&&<div className="video-off-overlay"><VideoOff size={28}/><span>Camera off</span></div>}<div className="tile-name">{isHost?(hostParticipant?.displayName||'Host'):'You'}{isHost&&<span className="host-badge">HOST</span>}</div></div>{otherParticipants.filter(p=>!p.leftAt).map(p=>{const prof=participantProfiles[p.userId];return <div key={p.userId} className={`video-tile ${p.isVideoOn?'':'no-video'}`}><div className="video-placeholder"><span>{initials(prof?.display_name||prof?.full_name||p.displayName)}</span></div><div className="tile-name">{prof?.display_name||prof?.full_name||p.displayName}{p.role==='host'&&<span className="host-badge">HOST</span>}</div>{p.isMuted&&<span className="muted-icon"><MicOff size={12}/></span>}{isHost&&<div className="tile-actions"><button onClick={()=>muteUser(p.userId)}><Mic size={12}/></button><button onClick={()=>removeUser(p.userId)}><UserX size={12}/></button></div>}</div>})}</div></div>{showChat&&<div className="live-chat-panel"><div className="live-chat-header"><h4>Chat</h4><button onClick={()=>setShowParticipants(!showParticipants)}><Users size={14}/></button></div>{showParticipants&&<div className="live-participant-list">{participants.filter(p=>!p.leftAt).map(p=>{const prof=participantProfiles[p.userId];return <div key={p.userId} className="live-participant-item"><span>{prof?.avatar_url?<img src={prof.avatar_url} alt=""/>:initials(prof?.display_name||prof?.full_name||p.displayName)}</span><div><b>{prof?.display_name||prof?.full_name||p.displayName}</b><small>{p.role}</small></div>{isHost&&p.userId!==userId&&<div className="participant-controls"><button onClick={()=>muteUser(p.userId)}>{p.isMuted?<MicOff size={11}/>:<Mic size={11}/>}</button><button onClick={()=>removeUser(p.userId)}><UserX size={11}/></button></div>}</div>})}</div>}<div className="live-chat-messages">{chatMessages.map(m=>{const prof=participantProfiles[m.user_id];return <div key={m.id} className={`chat-msg ${m.user_id===userId?'own':''} ${m.pinned?'pinned':''}`}><div className="chat-msg-avatar">{prof?.avatar_url?<img src={prof.avatar_url} alt=""/>:initials(prof?.display_name||prof?.full_name)}</div><div className="chat-msg-content"><div className="chat-msg-header"><span className="chat-msg-name">{prof?.display_name||prof?.full_name||'User'}</span>{m.pinned&&<Pin size={10}/>}</div><p>{m.body}</p></div>{isHost&&<button className="pin-btn" onClick={()=>togglePin(m)}>{m.pinned?<PinOff size={10}/>:<Pin size={10}/>}</button>}</div>})}<div ref={chatEndRef}/></div><div className="live-chat-input"><input value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')sendMsg()}} placeholder="Type a message…"/><button onClick={sendMsg} disabled={!chatInput.trim()}><Send size={14}/></button></div></div>}</div><div className="live-room-controls"><button className={isMuted?'off':''} onClick={toggleMic}>{isMuted?<MicOff size={18}/>:<Mic size={18}/>}</button><button className={!isVideoOn?'off':''} onClick={toggleCam}>{isVideoOn?<Video size={18}/>:<VideoOff size={18}/>}</button><button className={isScreenSharing?'on':''} onClick={toggleScreen}><Monitor size={18}/></button><button className="chat-toggle" onClick={()=>setShowChat(!showChat)}>Chat</button></div></div></div>
+  return <div className="live-room-overlay"><div className="live-room"><div className="live-room-header"><div className="live-room-title"><CircleDot size={14} className={roomStatus==='live'?'pulse':''}/><span>{session.title}</span>{roomStatus==='live'&&<span className="live-tag">LIVE</span>}{roomStatus==='waiting'&&<span className="waiting-tag">Waiting to start…</span>}{roomStatus==='ended'&&<span className="ended-tag">Ended</span>}</div><div className="live-room-header-right"><span className="participant-count"><Users size={14}/> {otherParticipants.length+1}</span>{isHost&&roomStatus==='waiting'&&<button className="start-session-btn" onClick={startSession}><CircleDot size={14}/> Start session</button>}{isHost&&roomStatus==='live'&&<button className="end-session-btn" onClick={endSession}><X size={14}/> End</button>}<button className="mobile-chat-toggle" onClick={()=>setShowMobileChat(!showMobileChat)}>Chat</button><button className="leave-btn" onClick={()=>{providerRef.current?.leave();onClose()}}><X size={16}/></button></div></div>{pinnedMsg&&<div className="pinned-banner"><Pin size={12}/><span><b>{participantProfiles[pinnedMsg.user_id]?.display_name||participantProfiles[pinnedMsg.user_id]?.full_name||'User'}:</b> {pinnedMsg.body}</span></div>}<div className="live-room-body"><div className="video-area">{isJitsi&&<div id="jitsi-container" className="jitsi-container"/>}{!isJitsi&&<div className="video-grid"><div className={`video-tile local ${isVideoOn?'':'no-video'}`}><video ref={localVideoRef} autoPlay muted playsInline className="local-video"/>{!isVideoOn&&<div className="video-off-overlay"><VideoOff size={28}/><span>Camera off</span></div>}<div className="tile-name">{isHost?(hostParticipant?.displayName||'Host'):'You'}{isHost&&<span className="host-badge">HOST</span>}</div></div>{otherParticipants.filter(p=>!p.leftAt).map(p=>{const prof=participantProfiles[p.userId];return <div key={p.userId} className={`video-tile ${p.isVideoOn?'':'no-video'}`}><div className="video-placeholder"><span>{initials(prof?.display_name||prof?.full_name||p.displayName)}</span></div><div className="tile-name">{prof?.display_name||prof?.full_name||p.displayName}{p.role==='host'&&<span className="host-badge">HOST</span>}</div>{p.isMuted&&<span className="muted-icon"><MicOff size={12}/></span>}{isHost&&<div className="tile-actions"><button onClick={()=>muteUser(p.userId)}><Mic size={12}/></button><button onClick={()=>removeUser(p.userId)}><UserX size={12}/></button></div>}</div>})}</div>}</div>{showChat&&<div className={`live-chat-panel ${showMobileChat?'show-mobile':''}`}><div className="live-chat-header"><h4>Chat</h4><button onClick={()=>setShowParticipants(!showParticipants)}><Users size={14}/></button>{showMobileChat&&<button className="mobile-close-chat" onClick={()=>setShowMobileChat(false)}><X size={14}/></button>}</div>{showParticipants&&<div className="live-participant-list">{participants.filter(p=>!p.leftAt).map(p=>{const prof=participantProfiles[p.userId];return <div key={p.userId} className="live-participant-item"><span>{prof?.avatar_url?<img src={prof.avatar_url} alt=""/>:initials(prof?.display_name||prof?.full_name||p.displayName)}</span><div><b>{prof?.display_name||prof?.full_name||p.displayName}</b><small>{p.role}</small></div>{isHost&&p.userId!==userId&&<div className="participant-controls"><button onClick={()=>muteUser(p.userId)}>{p.isMuted?<MicOff size={11}/>:<Mic size={11}/>}</button><button onClick={()=>removeUser(p.userId)}><UserX size={11}/></button></div>}</div>})}</div>}<div className="live-chat-messages" ref={chatListRef}>{hasMoreChat&&chatMessages.length>0&&<button className="load-more-chat" onClick={loadMoreChat}>Load older messages</button>}{chatMessages.map(m=>{const prof=participantProfiles[m.user_id];return <div key={m.id} className={`chat-msg ${m.user_id===userId?'own':''} ${m.pinned?'pinned':''}`}><div className="chat-msg-avatar">{prof?.avatar_url?<img src={prof.avatar_url} alt=""/>:initials(prof?.display_name||prof?.full_name)}</div><div className="chat-msg-content"><div className="chat-msg-header"><span className="chat-msg-name">{prof?.display_name||prof?.full_name||'User'}</span>{m.pinned&&<Pin size={10}/>}</div><p>{m.body}</p></div>{isHost&&<button className="pin-btn" onClick={()=>togglePin(m)}>{m.pinned?<PinOff size={10}/>:<Pin size={10}/>}</button>}</div>})}<div ref={chatEndRef}/></div><div className="live-chat-input"><input value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')sendMsg()}} placeholder="Type a message…"/><button onClick={sendMsg} disabled={!chatInput.trim()}><Send size={14}/></button></div></div>}</div><div className="live-room-controls"><button className={isMuted?'off':''} onClick={toggleMic}>{isMuted?<MicOff size={18}/>:<Mic size={18}/>}</button><button className={!isVideoOn?'off':''} onClick={toggleCam}>{isVideoOn?<Video size={18}/>:<VideoOff size={18}/>}</button><button className={isScreenSharing?'on':''} onClick={toggleScreen}><Monitor size={18}/></button><button className="chat-toggle" onClick={()=>{setShowChat(!showChat);setShowMobileChat(!showMobileChat)}}>Chat</button></div></div></div>
 }
 
 export default SessionsPage

@@ -1,25 +1,25 @@
 import type { LiveRoomProvider } from './types'
 import { MockLiveRoomProvider } from './mock-provider'
+import { JitsiLiveRoomProvider } from './jitsi-provider'
 
 export type { LiveRoomProvider, LiveRoomParticipant, LiveRoomChatMessage, LiveRoomState, LiveRoomEvents } from './types'
 
 let activeProvider: LiveRoomProvider | null = null
 
 /**
- * Get or create a LiveRoom provider.
- * Currently returns MockLiveRoomProvider.
- * To integrate Jitsi/LiveKit/Daily, add a provider class and
- * return it here based on session.live_room_provider.
+ * Create a LiveRoom provider based on session's live_room_provider setting.
+ * 'jitsi' → real Jitsi Meet via External API
+ * 'mock' or default → mock provider with getUserMedia
  */
 export function createLiveRoomProvider(providerType?: string): LiveRoomProvider {
   destroyLiveRoomProvider()
 
-  // Future: switch on providerType
-  // if (providerType === 'jitsi') return new JitsiLiveRoomProvider()
-  // if (providerType === 'livekit') return new LiveKitLiveRoomProvider()
-  // if (providerType === 'daily') return new DailyLiveRoomProvider()
+  if (providerType === 'jitsi') {
+    activeProvider = new JitsiLiveRoomProvider()
+  } else {
+    activeProvider = new MockLiveRoomProvider()
+  }
 
-  activeProvider = new MockLiveRoomProvider()
   return activeProvider
 }
 

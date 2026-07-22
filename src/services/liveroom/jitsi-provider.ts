@@ -1,14 +1,16 @@
 import type { LiveRoomProvider, LiveRoomEvents, LiveRoomParticipant, LiveRoomChatMessage, LiveRoomState } from './types'
 import { supabase } from '../../supabase'
 
+declare global {
+  interface Window { JitsiMeetExternalAPI?: any }
+}
+
 /**
- * MockLiveRoomProvider – a functional demo provider.
- * Uses Supabase Realtime + DB tables for state management.
- * Simulates video/audio locally (no actual WebRTC).
- *
- * Swap this for Jitsi/LiveKit/Daily by implementing LiveRoomProvider.
+ * JitsiLiveRoomProvider – uses Jitsi Meet External API via iframe.
+ * Free hosted at meet.jit.si or self-hosted.
+ * Falls back to MockLiveRoomProvider behavior for chat/state via Supabase.
  */
-export class MockLiveRoomProvider implements LiveRoomProvider {
+export class JitsiLiveRoomProvider implements LiveRoomProvider {
   private sessionId = ''
   private userId = ''
   private isHost = false
@@ -17,8 +19,8 @@ export class MockLiveRoomProvider implements LiveRoomProvider {
   private _isMuted = false
   private _isVideoOn = true
   private _isScreenSharing = false
-  private localStream: MediaStream | null = null
-  private screenStream: MediaStream | null = null
+  private api: any = null
+  private containerEl: HTMLElement | null = null
 
   async init(sessionId: string, userId: string, isHost: boolean): Promise<void> {
     this.sessionId = sessionId
@@ -27,25 +29,95 @@ export class MockLiveRoomProvider implements LiveRoomProvider {
   }
 
   async join(): Promise<void> {
-    // Get real media stream for camera/mic
-    try {
-      this.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      this._isVideoOn = true
-      this._isMuted = false
-    } catch {
-      // Camera/mic denied — continue with no media
-      this._isVideoOn = false
-      this._isMuted = true
-    }
-
-    // Join via RPC
+    // Join room state in DB
     const { error } = await supabase.rpc('join_session_room', { target_session: this.sessionId })
     if (error) throw new Error(error.message)
 
-    // Subscribe to realtime events
+    // Load Jitsi External API script if not loaded
+    if (!window.JitsiMeetExternalAPI) {
+      await new Promise<void>((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = 'https://meet.jit.si/external_api.js'
+        script.async = true
+        script.onload = () => resolve()
+        script.onerror = () => reject(new Error('Failed to load Jitsi API'))
+        document.head.appendChild(script)
+      })
+    }
+
+    // Create Jitsi container
+    this.containerEl = document.getElementById('jitsi-container')
+    if (!this.containerEl) throw new Error('Jitsi container not found')
+
+    const roomName = `NovaResort-${this.sessionId.slice(0, 8)}`
+
+    this.api = new window.JitsiMeetExternalAPI('meet.jit.si', {
+      parentNode: this.containerEl,
+      roomName,
+      userInfo: { displayName: this.userId, id: this.userId },
+      configOverwrite: {
+        startAudioOnly: false,
+        startScreenSharing: false,
+        enableChat: false, // We use our own chat via Supabase
+        disableDeepLinking: true,
+        disableProfile: true,
+        prejoinPageEnabled: false,
+        toolbarButtons: [], // Hide default toolbar — we have our own
+      },
+      interfaceConfigOverwrite: {
+        SHOW_JITSI_WATERMARK: false,
+        SHOW_WATERMARK_FOR_GUESTS: false,
+        SHOW_BRAND_WATERMARK: false,
+        DEFAULT_BACKGROUND: '#1a2420',
+        TOOLBAR_ALWAYS_VISIBLE: false,
+        filmStripOnly: false,
+      }
+    })
+
+    // Map Jitsi events to our provider events
+    this.api.addEventListener('audioMuteStatusChanged', (e: any) => {
+      this._isMuted = e.muted
+    })
+
+    this.api.addEventListener('videoMuteStatusChanged', (e: any) => {
+      this._isVideoOn = !e.muted
+    })
+
+    this.api.addEventListener('screenSharingStatusChanged', (e: any) => {
+      this._isScreenSharing = e.on
+    })
+
+    this.api.addEventListener('participantJoined', (id: string) => {
+      const displayName = this.api.getParticipantInfo(id)?.displayName || ''
+      this.events.onParticipantJoin?.({
+        userId: id,
+        displayName,
+        avatarUrl: null,
+        role: 'participant',
+        isMuted: false,
+        isVideoOn: true,
+        isScreenSharing: false,
+        joinedAt: new Date().toISOString(),
+        leftAt: null
+      })
+    })
+
+    this.api.addEventListener('participantLeft', (id: string) => {
+      this.events.onParticipantLeave?.(id)
+    })
+
+    this.api.addEventListener('readyToClose', () => {
+      this.events.onRoomStateChange?.({
+        status: 'ended',
+        startedAt: null,
+        endedAt: new Date().toISOString(),
+        participantCount: 0
+      })
+    })
+
+    // Subscribe to Supabase Realtime for chat + room state
     this.channel = supabase.channel(`live-room-${this.sessionId}`)
 
-    // Room state changes
     this.channel.on('postgres_changes', { event: '*', schema: 'public', table: 'session_room_state', filter: `session_id=eq.${this.sessionId}` }, (payload) => {
       const row = payload.new as any
       this.events.onRoomStateChange?.({
@@ -56,7 +128,6 @@ export class MockLiveRoomProvider implements LiveRoomProvider {
       })
     })
 
-    // Participant changes
     this.channel.on('postgres_changes', { event: '*', schema: 'public', table: 'session_room_participants', filter: `session_id=eq.${this.sessionId}` }, (payload) => {
       const row = payload.new as any
       if (payload.eventType === 'INSERT') {
@@ -82,7 +153,6 @@ export class MockLiveRoomProvider implements LiveRoomProvider {
       }
     })
 
-    // Chat messages
     this.channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'session_chat_messages', filter: `session_id=eq.${this.sessionId}` }, (payload) => {
       const row = payload.new as any
       this.events.onChatMessage?.({
@@ -100,9 +170,9 @@ export class MockLiveRoomProvider implements LiveRoomProvider {
   }
 
   async leave(): Promise<void> {
+    this.api?.dispose()
+    this.api = null
     await supabase.rpc('leave_session_room', { target_session: this.sessionId })
-    this.localStream?.getTracks().forEach(t => t.stop())
-    this.localStream = null
     if (this.channel) {
       supabase.removeChannel(this.channel)
       this.channel = null
@@ -110,9 +180,8 @@ export class MockLiveRoomProvider implements LiveRoomProvider {
   }
 
   async toggleCamera(): Promise<boolean> {
+    this.api?.executeCommand('toggleVideo')
     this._isVideoOn = !this._isVideoOn
-    const videoTrack = this.localStream?.getVideoTracks()[0]
-    if (videoTrack) videoTrack.enabled = this._isVideoOn
     await supabase.from('session_room_participants')
       .update({ is_video_on: this._isVideoOn })
       .eq('session_id', this.sessionId)
@@ -121,9 +190,8 @@ export class MockLiveRoomProvider implements LiveRoomProvider {
   }
 
   async toggleMicrophone(): Promise<boolean> {
+    this.api?.executeCommand('toggleAudio')
     this._isMuted = !this._isMuted
-    const audioTrack = this.localStream?.getAudioTracks()[0]
-    if (audioTrack) audioTrack.enabled = !this._isMuted
     await supabase.from('session_room_participants')
       .update({ is_muted: this._isMuted })
       .eq('session_id', this.sessionId)
@@ -132,37 +200,21 @@ export class MockLiveRoomProvider implements LiveRoomProvider {
   }
 
   async startScreenShare(): Promise<void> {
-    try {
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
-      this.screenStream = screenStream
-      this._isScreenSharing = true
-      // Listen for user stopping share via browser UI
-      screenStream.getVideoTracks()[0].onended = () => {
-        this._isScreenSharing = false
-        this.screenStream = null
-        this.events.onParticipantUpdate?.(this.userId, { isScreenSharing: false })
-      }
-    } catch {
-      // User cancelled share dialog
-    }
+    this.api?.executeCommand('toggleShareScreen')
+    this._isScreenSharing = true
     await supabase.from('session_room_participants')
-      .update({ is_screen_sharing: this._isScreenSharing })
+      .update({ is_screen_sharing: true })
       .eq('session_id', this.sessionId)
       .eq('user_id', this.userId)
   }
 
   async stopScreenShare(): Promise<void> {
-    this.screenStream?.getTracks().forEach(t => t.stop())
-    this.screenStream = null
+    this.api?.executeCommand('toggleShareScreen')
     this._isScreenSharing = false
     await supabase.from('session_room_participants')
       .update({ is_screen_sharing: false })
       .eq('session_id', this.sessionId)
       .eq('user_id', this.userId)
-  }
-
-  getScreenStream(): MediaStream | null {
-    return this.screenStream
   }
 
   async sendChatMessage(body: string): Promise<void> {
@@ -175,18 +227,17 @@ export class MockLiveRoomProvider implements LiveRoomProvider {
 
   async muteParticipant(userId: string, muted: boolean): Promise<void> {
     await supabase.rpc('mute_session_participant', { target_session: this.sessionId, target_user: userId, muted })
+    // Also mute in Jitsi if available
+    this.api?.executeCommand('muteParticipant', userId, muted)
   }
 
   async removeParticipant(userId: string): Promise<void> {
     await supabase.rpc('remove_session_participant', { target_session: this.sessionId, target_user: userId })
+    this.api?.executeCommand('kickParticipant', userId)
   }
 
   getLocalState() {
     return { isMuted: this._isMuted, isVideoOn: this._isVideoOn, isScreenSharing: this._isScreenSharing }
-  }
-
-  getLocalStream(): MediaStream | null {
-    return this.localStream
   }
 
   onEvents(events: LiveRoomEvents): void {
@@ -194,10 +245,9 @@ export class MockLiveRoomProvider implements LiveRoomProvider {
   }
 
   destroy(): void {
-    this.localStream?.getTracks().forEach(t => t.stop())
-    this.localStream = null
-    this.screenStream?.getTracks().forEach(t => t.stop())
-    this.screenStream = null
+    this.api?.dispose()
+    this.api = null
+    this.containerEl = null
     if (this.channel) {
       supabase.removeChannel(this.channel)
       this.channel = null

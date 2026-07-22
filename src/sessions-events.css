@@ -1243,9 +1243,159 @@
   .live-chat-panel { display:none; }
   .live-chat-panel.show-mobile { display:flex; position:absolute; inset:0; z-index:10; }
   .video-grid { grid-template-columns:1fr; }
+  .mobile-chat-toggle { display:flex !important; }
+  .live-room-controls .chat-toggle { display:none; }
+}
+
+@media(min-width:761px) {
+  .mobile-chat-toggle { display:none; }
+  .mobile-close-chat { display:none; }
 }
 
 @media(max-width:560px) {
   .session-form .form-row { grid-template-columns:1fr; }
   .create-session { font-size:0; width:36px; padding:0; justify-content:center; }
+}
+
+/* ---- Cover Upload ---- */
+.cover-upload-btn {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  background:rgba(0,0,0,.5);
+  color:#fff;
+  border-radius:8px;
+  padding:6px 12px;
+  font-size:10px;
+  font-weight:600;
+  cursor:pointer;
+  transition:background .2s;
+}
+
+.cover-upload-btn:hover {
+  background:rgba(0,0,0,.7);
+}
+
+/* ---- Edit Session ---- */
+.edit-btn {
+  width:34px;
+  height:34px;
+  border:0;
+  background:var(--page);
+  color:var(--muted);
+  border-radius:10px;
+  display:grid;
+  place-items:center;
+  cursor:pointer;
+}
+
+.detail-header-actions {
+  display:flex;
+  gap:6px;
+  margin-left:auto;
+}
+
+/* ---- Attendance ---- */
+.participant-row {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 0;
+  font-size:10px;
+  color:var(--muted);
+}
+
+.participant-status {
+  font-size:8px;
+  padding:2px 8px;
+  border-radius:999px;
+  background:var(--page);
+}
+
+.participant-status.registered {
+  background:#e8f5e9;
+  color:#2e7d32;
+}
+
+.participant-status.waitlisted {
+  background:#fff8e1;
+  color:#f57f17;
+}
+
+.participant-status.attended {
+  background:#e3f2fd;
+  color:#1565c0;
+}
+
+.participant-id {
+  font-family:monospace;
+  font-size:9px;
+  color:#aaa;
+}
+
+.attendance-toggle {
+  margin-left:auto;
+  height:24px;
+  padding:0 10px;
+  border:1px solid var(--line);
+  border-radius:6px;
+  background:var(--card);
+  color:var(--muted);
+  font-size:9px;
+  font-weight:600;
+  display:flex;
+  align-items:center;
+  gap:4px;
+  cursor:pointer;
+}
+
+.attendance-toggle:hover {
+  background:#e3f2fd;
+  color:#1565c0;
+  border-color:#1565c0;
+}
+
+/* ---- Jitsi Container ---- */
+.jitsi-container {
+  width:100%;
+  height:100%;
+  border-radius:14px;
+  overflow:hidden;
+}
+
+.jitsi-container iframe {
+  width:100%;
+  height:100%;
+  border:0;
+}
+
+/* ---- Load More Chat ---- */
+.load-more-chat {
+  width:100%;
+  padding:8px;
+  border:1px dashed #2d4a36;
+  border-radius:8px;
+  background:transparent;
+  color:#81c784;
+  font-size:10px;
+  cursor:pointer;
+  margin-bottom:8px;
+}
+
+.load-more-chat:hover {
+  background:#1a2e1a;
+}
+
+/* ---- Mobile Chat Toggle ---- */
+.mobile-chat-toggle {
+  height:32px;
+  padding:0 14px;
+  border:0;
+  border-radius:8px;
+  background:#1e2d23;
+  color:#aaa;
+  font-size:10px;
+  font-weight:600;
+  cursor:pointer;
+  display:none;
 }
