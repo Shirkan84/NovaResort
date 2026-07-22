@@ -192,12 +192,14 @@ export function AICompanion({ userId, onClose }:{ userId:string; onClose:()=>voi
     if(!body && !retryLast)return
     if(body.length>MAX_MESSAGE){setNotice({code:'MESSAGE_TOO_LONG',message:`Please keep messages under ${MAX_MESSAGE.toLocaleString()} characters.`});return}
     setSending(true);setNotice(null);setCrisis(false)
+    const optimisticId=tempId()
     if(!retryLast){
       setDraft('')
       setLastUserMessage(body)
-      setMessages(items=>[...items,{id:tempId(),conversation_id:current.id,user_id:userId,role:'user',content:body,created_at:new Date().toISOString(),deleted_at:null}])
+      setMessages(items=>[...items,{id:optimisticId,conversation_id:current.id,user_id:userId,role:'user',content:body,created_at:new Date().toISOString(),deleted_at:null}])
     }
     const { data, error } = await supabase.functions.invoke('ai-companion', { body:{ conversationId:current.id, message:body, retryLast } })
+    console.log('ai-companion response:', { hasData:!!data, hasError:!!error, crisis:data?.crisis, hasUserMsg:!!data?.userMessage, hasAssistantMsg:!!data?.assistantMessage, errorCode:data?.error?.code })
     if(error || data?.error){
       const normalized=normalizeError(data,error)
       setNotice(normalized)
@@ -210,6 +212,23 @@ export function AICompanion({ userId, onClose }:{ userId:string; onClose:()=>voi
       return
     }
     setCrisis(Boolean(data.crisis))
+    const srvUser=data?.userMessage as {id:string;role:string;content:string;created_at:string}|undefined
+    const srvAssistant=data?.assistantMessage as {id:string;role:string;content:string;created_at:string}|undefined
+    if(srvUser||srvAssistant){
+      setMessages(prev=>{
+        let next=[...prev]
+        if(srvUser){
+          const idx=next.findIndex(m=>m.id===optimisticId)
+          if(idx>=0){next[idx]={...next[idx],id:srvUser.id,created_at:srvUser.created_at}}
+          else{next.push({id:srvUser.id,conversation_id:current!.id,user_id:userId,role:'user',content:srvUser.content,created_at:srvUser.created_at,deleted_at:null})}
+        }
+        if(srvAssistant){
+          const alreadyHas=next.some(m=>m.id===srvAssistant!.id)
+          if(!alreadyHas) next.push({id:srvAssistant.id,conversation_id:current!.id,user_id:userId,role:'assistant',content:srvAssistant.content,created_at:srvAssistant.created_at,deleted_at:null})
+        }
+        return next
+      })
+    }
     await Promise.all([loadMessages(current.id,false),loadConversations()])
     setSending(false)
   }

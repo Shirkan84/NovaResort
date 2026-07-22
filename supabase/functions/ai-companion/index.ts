@@ -306,18 +306,21 @@ export default {
 
     /* ---- Resolve user message ---- */
     let userMessage = incoming;
+    let savedUser: { id: string; created_at: string } | null = null;
     if (retryLast) {
       const { data: lastUser } = await admin
-        .from("ai_messages").select("content")
+        .from("ai_messages").select("id,content,created_at")
         .eq("conversation_id", conversationId).eq("user_id", userId).eq("role", "user")
         .is("deleted_at", null).order("created_at", { ascending: false }).limit(1).maybeSingle();
       userMessage = String(lastUser?.content || "").trim();
       if (!userMessage) return errorJson("NO_MESSAGE_TO_RETRY", "No user message available to retry.", 400, requestId);
+      savedUser = lastUser ? { id: lastUser.id, created_at: lastUser.created_at } : null;
     } else {
-      const { error: insertError } = await admin.from("ai_messages").insert({
+      const { data: inserted, error: insertError } = await admin.from("ai_messages").insert({
         conversation_id: conversationId, user_id: userId, role: "user", content: userMessage,
-      });
+      }).select("id,created_at").single();
       if (insertError) return errorJson("SAVE_MESSAGE_FAILED", "Could not save your message.", 500, requestId);
+      savedUser = inserted ? { id: inserted.id, created_at: inserted.created_at } : null;
     }
 
     /* ---- Auto-title ---- */
@@ -333,7 +336,9 @@ export default {
       }).select("id,created_at").single();
       await admin.from("ai_usage").insert({ user_id: userId, conversation_id: conversationId, event_type: "blocked" });
       await admin.from("ai_conversations").update({ last_message_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", conversationId);
-      return json({ message: { id: saved?.id, role: "assistant", content, created_at: saved?.created_at }, crisis: true, requestId });
+      const response = { userMessage: { id: savedUser?.id, role: "user" as const, content: userMessage, created_at: savedUser?.created_at }, assistantMessage: { id: saved?.id, role: "assistant" as const, content, created_at: saved?.created_at }, crisis: true, requestId };
+      console.log("ai-companion crisis response:", JSON.stringify({ requestId, conversationId }));
+      return json(response);
     }
 
     /* ---- Build context ---- */
@@ -364,13 +369,16 @@ export default {
         input_tokens: result.inputTokens, output_tokens: result.outputTokens,
       });
       await admin.from("ai_conversations").update({ last_message_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", conversationId);
-      return json({ message: { id: saved?.id, role: "assistant", content: result.content, created_at: saved?.created_at }, crisis: false, requestId });
+      const response = { userMessage: { id: savedUser?.id, role: "user" as const, content: userMessage, created_at: savedUser?.created_at }, assistantMessage: { id: saved?.id, role: "assistant" as const, content: result.content, created_at: saved?.created_at }, crisis: false, requestId };
+      console.log("ai-companion success:", JSON.stringify({ requestId, conversationId, assistantId: saved?.id, contentLen: result.content.length }));
+      return json(response);
     } catch (err) {
       await admin.from("ai_usage").insert({ user_id: userId, conversation_id: conversationId, event_type: "error" });
       if (err instanceof ProviderError) {
+        console.error("ai-companion provider error:", { requestId, code: err.code, status: err.status });
         return errorJson(err.code, err.message, err.status, requestId);
       }
-      console.error("ai-companion failed", { requestId, err });
+      console.error("ai-companion failed:", { requestId, err });
       return errorJson("AI_REQUEST_FAILED", "Nova AI could not respond right now. Please try again shortly.", 502, requestId);
     }
   },
