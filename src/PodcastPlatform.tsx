@@ -20,7 +20,9 @@ type Episode = {
   audio_path: string | null; audio_url: string | null; audio_duration_seconds: number; cover_image_url: string | null;
   visibility: string; status: string; published_at: string | null; comments_enabled: boolean; reactions_enabled: boolean;
   transcript: string | null; saved: boolean; listen_position_seconds: number; tags: string[]; total_count: number;
-  content_warning?: string | null; explicit_content?: boolean; show_notes?: string | null
+  content_warning?: string | null; explicit_content?: boolean; show_notes?: string | null;
+  video_path?: string | null; video_url?: string | null; media_kind?: string;
+  media_mime_type?: string | null; media_size_bytes?: number | null
 }
 type ProfilePodcast = Pick<Podcast, 'id' | 'title' | 'short_description' | 'cover_image_url' | 'follower_count' | 'episode_count' | 'total_plays' | 'latest_episode_title' | 'tags'>
 export type PlayerEpisode = Episode & { podcast_title: string; creator_name: string }
@@ -31,7 +33,9 @@ type StudioEpisode = {
   audio_path: string | null; audio_url: string | null; audio_duration_seconds: number; cover_image_url: string | null;
   cover_path: string | null; visibility: string; status: string; published_at: string | null;
   comments_enabled: boolean; reactions_enabled: boolean; transcript: string | null; show_notes: string | null;
-  content_warning: string | null; explicit_content: boolean; created_at: string; deleted_at: string | null
+  content_warning: string | null; explicit_content: boolean; created_at: string; deleted_at: string | null;
+  video_path: string | null; video_url: string | null; media_kind: string;
+  media_mime_type: string | null; media_size_bytes: number | null
 }
 
 const categories = ['all', 'Mindfulness', 'Meditation', 'Emotional Healing', 'Personal Coaching', 'Relationships', 'Stress Management', 'Anxiety Support', 'Self Growth', 'Breathwork', 'Sleep', 'Confidence', 'Parenting', 'Grief', 'Trauma Awareness', 'Wellness Education', 'Spiritual Growth', 'Motivation', 'Healthy Habits']
@@ -235,6 +239,7 @@ function EpisodeList({ podcast, onPlay, selectedEpisodeId }: { podcast: Podcast;
           {ep.season_number != null && <span>S{ep.season_number}</span>}
           <span>E{ep.episode_number}</span>
           <span>{duration(ep.audio_duration_seconds)}</span>
+          {ep.media_kind === 'video' && <span className="explicit-tag" style={{ background: '#7c3aed', color: '#fff' }}>Video</span>}
           {ep.explicit_content && <span className="explicit-tag">Explicit</span>}
         </div>
         <h3>{ep.title}</h3>
@@ -267,6 +272,7 @@ function EpisodeList({ podcast, onPlay, selectedEpisodeId }: { podcast: Podcast;
         <button onClick={() => shareEpisode(selected)}><Share2 size={14} /> Share</button>
         {selected.saved && <button onClick={() => save(selected)}><Bookmark size={14} fill="currentColor" /> Saved</button>}
       </div>
+      {selected.video_url && <div className="episode-video-player"><video controls src={selected.video_url} preload="none" style={{ width: '100%', maxHeight: 400, borderRadius: 8 }} /></div>}
       {selected.transcript && <details className="transcript-details"><summary><FileAudio size={14} /> Transcript</summary><p>{selected.transcript}</p></details>}
       {selected.show_notes && <details className="transcript-details"><summary><FileAudio size={14} /> Show Notes</summary><p>{selected.show_notes}</p></details>}
       {selected.comments_enabled ? <form className="comment-form" onSubmit={addComment}><input value={comment} onChange={e => setComment(e.target.value)} placeholder="Add a calm, respectful comment" /><button><Send size={14} /> Comment</button></form> : <p className="muted">Comments are disabled for this episode.</p>}
@@ -568,7 +574,7 @@ function PodcastStudio({ userId, initialAction = 'list', initialPodcastId, initi
   async function togglePublishEpisode(ep: StudioEpisode) {
     const newStatus = ep.status === 'published' ? 'draft' : 'published'
     if (newStatus === 'published') {
-      if (!ep.audio_url && !(ep as any).video_url) { showMsg('Cannot publish: episode has no media file. Upload audio or video first.'); return }
+      if (!ep.audio_url && !ep.video_url) { showMsg('Cannot publish: episode has no media file. Upload audio or video first.'); return }
       if (!window.confirm(`Publish episode "${ep.title}"? It will become publicly available.`)) return
     }
     if (newStatus === 'draft' && !window.confirm(`Unpublish episode "${ep.title}"? It will be hidden from listeners.`)) return
@@ -682,11 +688,11 @@ function PodcastStudio({ userId, initialAction = 'list', initialPodcastId, initi
       </div>
       {episodesLoading ? <div className="empty-state">Loading episodes...</div> : episodes.length === 0 ? <div className="empty-state"><Radio /><h3>No episodes yet</h3><p>Create your first episode to start sharing audio content.</p></div> : <div className="studio-list">{episodes.filter(ep => episodeFilter === 'all' || ep.status === episodeFilter).map(ep => <article key={ep.id} className="studio-episode-card">
         <div className="studio-episode-info">
-          <div className="episode-meta-line"><span>E{ep.episode_number}</span>{ep.season_number != null && <span>S{ep.season_number}</span>}<span>{duration(ep.audio_duration_seconds)}</span><span className={`status-badge ${ep.status}`}>{ep.status}</span>{(ep as any).media_kind === 'video' && <span><Video size={10} /> Video</span>}</div>
+          <div className="episode-meta-line"><span>E{ep.episode_number}</span>{ep.season_number != null && <span>S{ep.season_number}</span>}<span>{duration(ep.audio_duration_seconds)}</span><span className={`status-badge ${ep.status}`}>{ep.status}</span>{ep.media_kind === 'video' && <span><Video size={10} /> Video</span>}</div>
           <b>{ep.title}</b>
           <small>{ep.description ? ep.description.slice(0, 100) + (ep.description.length > 100 ? '...' : '') : 'No description'}</small>
           {ep.audio_url && <audio controls src={ep.audio_url} preload="none" style={{ height: 32, marginTop: 6 }} />}
-          {(ep as any).video_url && <video controls src={(ep as any).video_url} preload="none" style={{ width: '100%', maxHeight: 120, borderRadius: 8, marginTop: 6 }} />}
+          {ep.video_url && <video controls src={ep.video_url} preload="none" style={{ width: '100%', maxHeight: 120, borderRadius: 8, marginTop: 6 }} />}
         </div>
         <div className="studio-episode-actions">
           <button onClick={() => navigateStudio('edit-episode', selectedPodcast, ep.id)}><Edit3 size={14} /> Edit</button>
@@ -981,7 +987,7 @@ function EpisodeEditForm({ podcast, episodeId, userId, uploadCoverImage, onBack,
   useEffect(() => {
     supabase.from('podcast_episodes').select('*').eq('id', episodeId).eq('creator_id', userId).is('deleted_at', null).single().then(({ data }) => {
       setEpisode(data as StudioEpisode)
-      setCoverPreview((data as any)?.cover_image_url || null)
+      setCoverPreview(data?.cover_image_url || null)
       setLoading(false)
     })
   }, [episodeId, userId])
@@ -991,8 +997,30 @@ function EpisodeEditForm({ podcast, episodeId, userId, uploadCoverImage, onBack,
     if (!episode) return
     const form = new FormData(event.currentTarget)
     const audioFile = form.get('audio_file') as File | null
+    const videoFile = form.get('video_file') as File | null
     let audio_path = episode.audio_path, audio_url = episode.audio_url, audio_duration = episode.audio_duration_seconds
-    if (audioFile && audioFile.size > 0) {
+    let video_path = episode.video_path, video_url = episode.video_url, media_kind = episode.media_kind || 'audio'
+    let media_mime_type = episode.media_mime_type, media_size_bytes = episode.media_size_bytes
+    if (videoFile && videoFile.size > 0) {
+      if (!VIDEO_TYPES.includes(videoFile.type)) { showMsg('Unsupported video type. Supported: MP4, WebM, MOV.'); return }
+      if (videoFile.size > MAX_VIDEO) { showMsg('Video must be under 500MB.'); return }
+      const videoDuration = await new Promise<number>(resolve => {
+        const v = document.createElement('video'); v.preload = 'metadata'
+        v.src = URL.createObjectURL(videoFile)
+        v.onloadedmetadata = () => { resolve(Math.floor(v.duration || 0)); URL.revokeObjectURL(v.src) }
+        v.onerror = () => { resolve(0); URL.revokeObjectURL(v.src) }
+      })
+      if (videoDuration > MAX_DURATION) { showMsg(`Episode duration is ${Math.floor(videoDuration / 60)}:${String(videoDuration % 60).padStart(2, '0')}. Maximum allowed is 60 minutes.`); return }
+      const path = `${userId}/${crypto.randomUUID()}-${safeFileName(videoFile.name)}`
+      setUploadProgress(0)
+      const { error } = await supabase.storage.from('podcast-video').upload(path, videoFile, { contentType: videoFile.type })
+      setUploadProgress(null)
+      if (error) { showMsg(error.message); return }
+      const { data: urlData } = await supabase.storage.from('podcast-video').createSignedUrl(path, SIGNED_URL_EXPIRY)
+      if (!urlData?.signedUrl) { showMsg('Failed to get video URL.'); return }
+      video_path = path; video_url = urlData.signedUrl; audio_duration = videoDuration
+      media_kind = 'video'; media_mime_type = videoFile.type; media_size_bytes = videoFile.size
+    } else if (audioFile && audioFile.size > 0) {
       if (!AUDIO_TYPES.includes(audioFile.type)) { showMsg('Unsupported audio type. Supported: MP3, M4A, AAC, WebM, OGG, WAV.'); return }
       if (audioFile.size > MAX_AUDIO) { showMsg('Audio must be under 100MB.'); return }
       const audioDuration = await new Promise<number>(resolve => {
@@ -1009,6 +1037,7 @@ function EpisodeEditForm({ podcast, episodeId, userId, uploadCoverImage, onBack,
       const { data: urlData } = await supabase.storage.from('podcast-audio').createSignedUrl(path, SIGNED_URL_EXPIRY)
       if (!urlData?.signedUrl) { showMsg('Failed to get audio URL.'); return }
       audio_path = path; audio_url = urlData.signedUrl; audio_duration = audioDuration
+      media_kind = 'audio'; media_mime_type = audioFile.type; media_size_bytes = audioFile.size
     }
     const coverFile = form.get('cover_image') as File | null
     let cover_url = episode.cover_image_url, cover_path_val = episode.cover_path
@@ -1022,6 +1051,7 @@ function EpisodeEditForm({ podcast, episodeId, userId, uploadCoverImage, onBack,
       season_number: form.get('season_number') ? Number(form.get('season_number')) : null,
       episode_number: Number(form.get('episode_number') || 1),
       audio_path, audio_url, audio_duration_seconds: audio_duration,
+      video_path, video_url, media_kind, media_mime_type, media_size_bytes,
       cover_image_url: cover_url, cover_path: cover_path_val,
       transcript: String(form.get('transcript') || '') || null,
       content_warning: String(form.get('content_warning') || '') || null,
@@ -1052,10 +1082,11 @@ function EpisodeEditForm({ podcast, episodeId, userId, uploadCoverImage, onBack,
         <label>Episode number<input name="episode_number" type="number" min="1" defaultValue={episode.episode_number} required /></label>
       </div>
       <label>Description<textarea name="description" maxLength={8000} defaultValue={episode.description} /></label>
-      <label>Show notes<small>Optional detailed notes.</small><textarea name="show_notes" maxLength={10000} defaultValue={(episode as any).show_notes || ''} placeholder="Detailed show notes" /></label>
+      <label>Show notes<small>Optional detailed notes.</small><textarea name="show_notes" maxLength={10000} defaultValue={episode.show_notes || ''} placeholder="Detailed show notes" /></label>
       {episode.audio_url && <div className="current-audio"><small>Current audio:</small><audio controls src={episode.audio_url} preload="none" /></div>}
-      {(episode as any).video_url && <div className="current-audio"><small>Current video:</small><video controls src={(episode as any).video_url} preload="none" style={{ width: '100%', maxHeight: 200, borderRadius: 8 }} /></div>}
+      {episode.video_url && <div className="current-audio"><small>Current video:</small><video controls src={episode.video_url} preload="none" style={{ width: '100%', maxHeight: 200, borderRadius: 8 }} /></div>}
       <label>Replace audio file<small>Leave empty to keep current. Max 100MB, max 60 minutes.</small><input type="file" name="audio_file" accept="audio/mpeg,audio/mp4,audio/aac,audio/x-m4a,audio/webm,audio/ogg,audio/wav" /></label>
+      <label>Replace video file<small>Leave empty to keep current. Max 500MB, max 60 minutes.</small><input type="file" name="video_file" accept="video/mp4,video/webm,video/quicktime" /></label>
       <label>Cover image<small>Leave empty to keep current cover.</small>
         <div className="cover-upload">{coverPreview ? <img src={coverPreview} alt="Cover preview" /> : <div className="cover-placeholder"><Upload size={20} /> Click to upload cover</div>}
           <input type="file" name="cover_image" accept="image/jpeg,image/png,image/webp" onChange={e => { const f = e.target.files?.[0]; if (f) setCoverPreview(URL.createObjectURL(f)) }} />

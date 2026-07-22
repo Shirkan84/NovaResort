@@ -30,7 +30,7 @@ type Podcast = {id:string;title:string;short_description:string|null;cover_image
   follower_count:number;episode_count:number;total_plays:number;
   latest_episode_title:string|null;latest_episode_published_at:string|null}
 type PodcastEpisode = {id:string;podcast_id:string;title:string;status:string;published_at:string|null;
-  audio_duration_seconds:number|null;created_at:string;deleted_at:string|null}
+  audio_duration_seconds:number|null;media_kind:string|null;created_at:string;deleted_at:string|null}
 type Notification = {id:string;type:string;title:string|null;body:string|null;entity_id:string|null;
   read_at:string|null;created_at:string;actor_id:string|null;
   profiles?:{full_name:string;avatar_url:string|null}|null}
@@ -76,7 +76,7 @@ export function HealerDashboard({userId,onOpenSession,onCreateSession,onClose}:{
         supabase.from('sessions').select('id,host_id,title,description,category,language,starts_at,ends_at,status,capacity,session_type,cover_image_url,price,profiles!sessions_host_id_fkey(full_name,display_name,avatar_url),session_registrations(status,user_id),session_room_state(status,started_at,ended_at)').eq('host_id',userId).order('starts_at',{ascending:false}).limit(50),
         supabase.from('friendships').select('id,requester_id,addressee_id,status,created_at,profiles!friendships_requester_id_fkey(full_name,display_name,avatar_url,online)').or(`requester_id.eq.${userId},addressee_id.eq.${userId}`).eq('status','accepted').order('created_at',{ascending:false}).limit(50),
         supabase.from('podcasts').select('id,title,short_description,cover_image_url,category,language,creator_id,status,visibility,follower_count,episode_count,total_plays,latest_episode_title,latest_episode_published_at').eq('creator_id',userId).order('created_at',{ascending:false}),
-        supabase.from('podcast_episodes').select('id,podcast_id,title,status,published_at,audio_duration_seconds,created_at,deleted_at').eq('creator_id',userId).is('deleted_at',null).order('created_at',{ascending:false}).limit(20),
+        supabase.from('podcast_episodes').select('id,podcast_id,title,status,published_at,audio_duration_seconds,media_kind,created_at,deleted_at').eq('creator_id',userId).is('deleted_at',null).order('created_at',{ascending:false}).limit(20),
         supabase.from('notifications').select('id,type,title,body,entity_id,read_at,created_at,actor_id,profiles!notifications_actor_id_fkey(full_name,avatar_url)').eq('user_id',userId).order('created_at',{ascending:false}).limit(30)
       ])
       if(profRes.error)throw profRes.error
@@ -404,7 +404,7 @@ export function HealerDashboard({userId,onOpenSession,onCreateSession,onClose}:{
       {draftEpisodes.length>0&&<section className="hd-section" style={{marginTop:16}}>
         <div className="hd-section-head"><h3>Draft Episodes</h3></div>
         <div className="hd-episode-list">{draftEpisodes.map(ep=>
-          <div key={ep.id} className="hd-episode-row"><span className="hd-ep-status draft">Draft</span><b>{ep.title}</b><span>{timeAgo(ep.created_at)}</span><button onClick={()=>window.location.hash='#/podcasts/manage'}>Edit</button></div>
+          <div key={ep.id} className="hd-episode-row"><span className="hd-ep-status draft">Draft</span>{ep.media_kind==='video'&&<span className="hd-ep-status" style={{background:'#7c3aed',color:'#fff'}}>Video</span>}<b>{ep.title}</b><span>{timeAgo(ep.created_at)}</span><button onClick={()=>window.location.hash='#/podcasts/manage'}>Edit</button></div>
         )}</div>
       </section>}
     </div>:null}
