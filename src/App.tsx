@@ -247,7 +247,9 @@ function AuthScreen() {
         <button className="auth-submit" disabled={loading}>{loading ? 'Please wait…' : mode === 'register' ? 'Create account' : mode === 'reset' ? 'Send reset link' : 'Sign in'}<ChevronRight size={17}/></button>
       </form>
       <div className="auth-switch">{mode === 'login' ? <>New to Nova Resort? <button onClick={() => setMode('register')}>Create an account</button></> : <>Already have an account? <button onClick={() => setMode('login')}>Sign in</button></>}</div>
-    </div></div>
+    </div>
+    <footer className="auth-footer">&copy; 2026 Nova Resort. Created and designed by Shir Kanevsky. All rights reserved.</footer>
+  </div>
   </div>
 }
 
