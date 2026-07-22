@@ -6,6 +6,12 @@
     <meta name="theme-color" content="#f5f8f2" />
     <meta name="description" content="Nova Resort — a safe space to connect, reflect and grow." />
     <title>Nova Resort</title>
+    <script>
+      (function() {
+        var t = localStorage.getItem('nova-theme');
+        if (t === 'dark') document.documentElement.classList.add('dark');
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

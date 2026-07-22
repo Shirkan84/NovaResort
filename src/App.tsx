@@ -279,9 +279,11 @@ function App() {
   const [authLoading, setAuthLoading] = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
   const [dark, setDark] = useState(() => {
-    const saved = localStorage.getItem('nova-dark-mode')
-    if (saved !== null) return saved === 'true'
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
+    const saved = localStorage.getItem('nova-theme')
+    if (saved === 'dark') return true
+    if (saved === 'light') return false
+    localStorage.removeItem('nova-dark-mode')
+    return false
   })
   const [notice, setNotice] = useState('')
   const [activeNav, setActiveNav] = useState('Home')
@@ -314,7 +316,7 @@ function App() {
     return () => window.removeEventListener('hashchange', syncRoute)
   }, [])
   useEffect(() => applyLanguage(language), [language])
-  useEffect(() => { localStorage.setItem('nova-dark-mode', String(dark)) }, [dark])
+  useEffect(() => { localStorage.setItem('nova-theme', dark ? 'dark' : 'light') }, [dark])
   useEffect(() => { return () => { if (noticeTimer.current) window.clearTimeout(noticeTimer.current) } }, [])
   useEffect(() => {
     if (!session) return
