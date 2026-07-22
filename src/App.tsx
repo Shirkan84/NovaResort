@@ -502,10 +502,8 @@ function App() {
           <button onClick={() => openFeature('sessions')}><CalendarDays size={16}/> Sessions</button>
           <button onClick={() => openFeature('ai')}><Bot size={16}/> AI Companion</button>
           <button onClick={() => openFeature('messages')}><MessageCircleMore size={16}/> Private rooms</button>
-          {canCreateContent && <>
-            <button className="healer-action" onClick={() => openPodcast('manage')}><Mic size={16}/> Podcast Studio</button>
-            <button className="healer-action" onClick={() => openFeature('sessions')}><Video size={16}/> Host a session</button>
-          </>}
+          <button onClick={() => openPodcast('manage')}><Mic size={16}/> Create Podcast</button>
+          {canCreateContent && <button className="healer-action" onClick={() => openFeature('sessions')}><Video size={16}/> Host a session</button>}
         </div>
 
         <div className="layout">

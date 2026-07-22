@@ -272,6 +272,20 @@ export function PrivateChatRoom({room,userId,onClose,onOpenProfile}:{room:DbRoom
     input.click()
   }
 
+  function handleFileUpload(){
+    const input=document.createElement('input')
+    input.type='file'
+    input.accept='image/jpeg,image/png,image/gif,image/webp,audio/mpeg,audio/mp4,audio/aac,audio/x-m4a,audio/webm,audio/ogg,video/webm,video/mp4,application/pdf'
+    input.onchange=async()=>{
+      const file=input.files?.[0]
+      if(!file)return
+      if(file.size>50*1024*1024){setError('File must be under 50MB.');return}
+      const type=file.type.startsWith('image/')?'image':file.type.startsWith('audio/')?'audio':file.type.startsWith('video/')?'video':'image'
+      await uploadMedia(file,type as 'image'|'audio'|'video','')
+    }
+    input.click()
+  }
+
   async function startCall(videoCall:boolean){
     if(!privateRoom.other_user_id)return
     const roomId=`nova-dm-${[userId,privateRoom.other_user_id].sort().join('-')}`
@@ -420,7 +434,7 @@ export function PrivateChatRoom({room,userId,onClose,onOpenProfile}:{room:DbRoom
     {emojiOpen&&<div className="messenger-picker emoji-picker">{emojiGroups.map(group=><section key={group[0]}><b>{group[0]}</b><div>{group.slice(1).map(emoji=><button key={`${group[0]}-${emoji}`} onClick={()=>insertEmoji(emoji)}>{emoji}</button>)}</div></section>)}</div>}
     {gestureOpen&&<div className="messenger-picker gesture-picker">{gestures.map(([emoji,label])=><button key={label} onClick={()=>sendGesture(emoji,label)}><span>{emoji}</span>{label}</button>)}</div>}
     <form className="message-compose messenger-compose" onSubmit={send}>
-      <div className="composer-tools"><button type="button" onClick={()=>{setEmojiOpen(value=>!value);setGestureOpen(false)}} aria-label="Emoji picker"><Smile/></button><button type="button" onClick={()=>{setGestureOpen(value=>!value);setEmojiOpen(false)}} aria-label="Gesture picker"><Sparkles/></button><button type="button" disabled title="GIF search needs a configured provider"><MessageCircleMore/></button><button type="button" onClick={handleImageUpload} title="Share an image"><Image/></button><button type="button" disabled title="File attachments coming soon"><Paperclip/></button><button type="button" onClick={()=>startRecording(false)} title="Record a voice message"><Mic/></button><button type="button" onClick={()=>startRecording(true)} title="Record a video message"><Video/></button><button type="button" disabled title="Games coming soon"><Gamepad2/></button></div>
+      <div className="composer-tools"><button type="button" onClick={()=>{setEmojiOpen(value=>!value);setGestureOpen(false)}} aria-label="Emoji picker"><Smile/></button><button type="button" onClick={()=>{setGestureOpen(value=>!value);setEmojiOpen(false)}} aria-label="Gesture picker"><Sparkles/></button><button type="button" disabled title="GIF search needs a configured provider"><MessageCircleMore/></button><button type="button" onClick={handleImageUpload} title="Share an image"><Image/></button><button type="button" onClick={handleFileUpload} title="Share a file"><Paperclip/></button><button type="button" onClick={()=>startRecording(false)} title="Record a voice message"><Mic/></button><button type="button" onClick={()=>startRecording(true)} title="Record a video message"><Video/></button><button type="button" disabled title="Games coming soon"><Gamepad2/></button></div>
       <textarea value={text} onChange={e=>updateText(e.target.value)} onKeyDown={composerKeyDown} maxLength={4000} placeholder="Write a private message..." rows={1}/>
       <button aria-label="Send"><Send/></button>
     </form>

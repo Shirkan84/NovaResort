@@ -35,6 +35,7 @@ type StudioEpisode = {
 }
 
 const categories = ['all', 'Mindfulness', 'Meditation', 'Emotional Healing', 'Personal Coaching', 'Relationships', 'Stress Management', 'Anxiety Support', 'Self Growth', 'Breathwork', 'Sleep', 'Confidence', 'Parenting', 'Grief', 'Trauma Awareness', 'Wellness Education', 'Spiritual Growth', 'Motivation', 'Healthy Habits']
+const languages = ['all', 'English', 'Hebrew', 'Spanish', 'French', 'German', 'Portuguese', 'Arabic', 'Hindi', 'Japanese', 'Chinese']
 const speeds = [0.75, 1, 1.25, 1.5, 2]
 const AUDIO_TYPES = ['audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/x-m4a']
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
@@ -146,21 +147,30 @@ export function PodcastMiniPlayer({ episode, onClose }: { episode: PlayerEpisode
 function EpisodeList({ podcast, onPlay, selectedEpisodeId }: { podcast: Podcast; onPlay: (episode: PlayerEpisode) => void; selectedEpisodeId?: string | null }) {
   const [episodes, setEpisodes] = useState<Episode[]>([])
   const [loading, setLoading] = useState(true)
+  const [totalCount, setTotalCount] = useState(0)
+  const [pageOffset, setPageOffset] = useState(0)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [comments, setComments] = useState<Comment[]>([])
   const [comment, setComment] = useState('')
   const [reportingId, setReportingId] = useState<string | null>(null)
   const [reportReason, setReportReason] = useState('')
   const selected = episodes.find(e => e.id === selectedEpisodeId) || episodes[0]
+  const EP_PAGE = 20
 
-  const load = useCallback(() => {
-    setLoading(true)
-    supabase.rpc('list_podcast_episodes', { podcast_ref: podcast.id, page_limit: 20, page_offset: 0 }).then(({ data }) => {
-      setEpisodes((data as Episode[]) || [])
+  const load = useCallback((offset = 0, append = false) => {
+    if (append) setLoadingMore(true); else setLoading(true)
+    supabase.rpc('list_podcast_episodes', { podcast_ref: podcast.id, page_limit: EP_PAGE, page_offset: offset }).then(({ data }) => {
+      const rows = (data as Episode[]) || []
+      const total = rows.length > 0 ? rows[0].total_count || rows.length : 0
+      setEpisodes(prev => append ? [...prev, ...rows] : rows)
+      setTotalCount(total)
+      setPageOffset(offset)
       setLoading(false)
+      setLoadingMore(false)
     })
   }, [podcast.id])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load(0) }, [load])
 
   useEffect(() => {
     if (!selected?.comments_enabled) return
@@ -237,7 +247,9 @@ function EpisodeList({ podcast, onPlay, selectedEpisodeId }: { podcast: Podcast;
           <button type="button" onClick={() => { setReportingId(null); setReportReason('') }}>Cancel</button>
         </div>
       </form>}
-    </article>)}</div>
+    </article>)}
+      {episodes.length < totalCount && <div className="podcast-load-more"><button onClick={() => load(pageOffset + EP_PAGE, true)} disabled={loadingMore}>{loadingMore ? 'Loading...' : 'Load more episodes'}</button></div>}
+    </div>
     {selected && <section className="episode-detail">
       <h3>{selected.title}</h3>
       <div className="episode-meta-line">
@@ -276,6 +288,7 @@ function PodcastStudio({ userId }: { userId: string }) {
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [coverPreview, setCoverPreview] = useState<string | null>(null)
   const [storageBytes, setStorageBytes] = useState<number>(0)
+  const [podcastStats, setPodcastStats] = useState<Record<string, { plays: number; followers: number; episodes: number }>>({})
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
 
@@ -304,6 +317,22 @@ function PodcastStudio({ userId }: { userId: string }) {
 
   useEffect(() => { loadCreatorStatus() }, [loadCreatorStatus])
   useEffect(() => { if (creatorStatus?.eligible) { loadPodcasts(); supabase.rpc('get_podcast_storage_usage', { creator: userId }).then(({ data }) => setStorageBytes(Number(data) || 0)) } }, [creatorStatus, loadPodcasts, userId])
+
+  const loadStats = useCallback(async (podcastIds: string[]) => {
+    if (podcastIds.length === 0) return
+    const stats: Record<string, { plays: number; followers: number; episodes: number }> = {}
+    await Promise.all(podcastIds.map(async (pid) => {
+      const [{ count: followers }, { count: episodes }] = await Promise.all([
+        supabase.from('podcast_follows').select('podcast_id', { count: 'exact', head: true }).eq('podcast_id', pid),
+        supabase.from('podcast_episodes').select('id', { count: 'exact', head: true }).eq('podcast_id', pid).eq('status', 'published').is('deleted_at', null)
+      ])
+      const { count: plays } = await supabase.from('podcast_listens').select('id', { count: 'exact', head: true }).eq('podcast_id', pid)
+      stats[pid] = { plays: plays || 0, followers: followers || 0, episodes: episodes || 0 }
+    }))
+    setPodcastStats(stats)
+  }, [])
+
+  useEffect(() => { if (podcasts.length > 0) loadStats(podcasts.map(p => p.id)) }, [podcasts, loadStats])
 
   function showMsg(text: string) { setMessage(text); setTimeout(() => setMessage(''), 4000) }
 
@@ -532,6 +561,7 @@ function PodcastStudio({ userId }: { userId: string }) {
             <b>{p.title}</b>
             <span className={`status-badge ${p.status}`}>{p.status}</span>
             <span>{p.visibility}</span>
+            {podcastStats[p.id] && <div className="studio-podcast-stats"><span>{podcastStats[p.id].plays} plays</span><span>{podcastStats[p.id].followers} followers</span><span>{podcastStats[p.id].episodes} episodes</span></div>}
             <small>{p.short_description || 'No description'}</small>
           </div>
         </div>
@@ -780,14 +810,19 @@ export function PodcastPlatform({ userId, isHealer, podcastId, episodeId, studio
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [category, setCategory] = useState('all')
+  const [language, setLanguage] = useState('all')
   const [sort, setSort] = useState('popular')
   const [items, setItems] = useState<Podcast[]>([])
   const [selected, setSelected] = useState<Podcast | null>(null)
   const [loading, setLoading] = useState(true)
+  const [totalCount, setTotalCount] = useState(0)
+  const [pageOffset, setPageOffset] = useState(0)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [following, setFollowing] = useState(false)
   const [reportMode, setReportMode] = useState(false)
   const [reportReason, setReportReason] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const PAGE_LIMIT = 18
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -795,15 +830,20 @@ export function PodcastPlatform({ userId, isHealer, podcastId, episodeId, studio
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [query])
 
-  const load = useCallback(() => {
-    setLoading(true)
-    supabase.rpc('search_podcasts', { search_text: debouncedQuery, category_filter: category, language_filter: 'all', tag_filter: 'all', sort_by: sort, page_limit: 18, page_offset: 0 }).then(({ data }) => {
-      setItems((data as Podcast[]) || [])
+  const load = useCallback((offset = 0, append = false) => {
+    if (append) setLoadingMore(true); else setLoading(true)
+    supabase.rpc('search_podcasts', { search_text: debouncedQuery, category_filter: category, language_filter: language, tag_filter: 'all', sort_by: sort, page_limit: PAGE_LIMIT, page_offset: offset }).then(({ data }) => {
+      const rows = (data as Podcast[]) || []
+      const total = rows.length > 0 ? rows[0].total_count || rows.length : 0
+      setItems(prev => append ? [...prev, ...rows] : rows)
+      setTotalCount(total)
+      setPageOffset(offset)
       setLoading(false)
+      setLoadingMore(false)
     })
-  }, [debouncedQuery, category, sort])
+  }, [debouncedQuery, category, language, sort])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load(0) }, [load])
 
   useEffect(() => {
     if (!podcastId) { setSelected(null); return }
@@ -895,6 +935,7 @@ export function PodcastPlatform({ userId, isHealer, podcastId, episodeId, studio
       <div className="podcast-filters">
         <label><Search size={15} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search title, healer, topic, tag, language, or description" /></label>
         <select value={category} onChange={e => setCategory(e.target.value)}>{categories.map(c => <option key={c} value={c}>{c === 'all' ? 'All categories' : c}</option>)}</select>
+        <select value={language} onChange={e => setLanguage(e.target.value)}>{languages.map(l => <option key={l} value={l}>{l === 'all' ? 'All languages' : l}</option>)}</select>
         <select value={sort} onChange={e => setSort(e.target.value)}>
           <option value="popular">Most popular</option>
           <option value="newest">Newest</option>
@@ -902,7 +943,11 @@ export function PodcastPlatform({ userId, isHealer, podcastId, episodeId, studio
           <option value="played">Most played</option>
         </select>
       </div>
-      {loading ? <div className="podcast-grid">{Array.from({ length: 6 }).map((_, i) => <article key={i} className="podcast-card skeleton" />)}</div> : items.length === 0 ? <div className="empty-state"><Radio /><h3>No podcasts found</h3><p>{query ? 'Try a different search or category.' : 'No published podcasts yet. Approved professionals can create from Podcast Studio.'}</p></div> : <div className="podcast-grid">{items.map(item => <PodcastCard key={item.id} podcast={item} onOpen={onOpenPodcast} onPlay={async (podcast) => { if (!podcast.latest_episode_id) return; const { data } = await supabase.rpc('list_podcast_episodes', { podcast_ref: podcast.id, page_limit: 1, page_offset: 0 }); const ep = ((data as Episode[]) || []).find(e => e.id === podcast.latest_episode_id) || ((data as Episode[]) || [])[0]; if (ep) onPlayEpisode({ ...ep, podcast_title: podcast.title, creator_name: podcast.creator_name }) }} onOpenProfile={onOpenProfile} />)}</div>}
+      {!loading && totalCount > 0 && <div className="podcast-result-count">{totalCount} podcast{totalCount !== 1 ? 's' : ''} found</div>}
+      {loading ? <div className="podcast-grid">{Array.from({ length: 6 }).map((_, i) => <article key={i} className="podcast-card skeleton" />)}</div> : items.length === 0 ? <div className="empty-state"><Radio /><h3>No podcasts found</h3><p>{query ? 'Try a different search or category.' : 'No published podcasts yet. Approved professionals can create from Podcast Studio.'}</p></div> : <>
+        <div className="podcast-grid">{items.map(item => <PodcastCard key={item.id} podcast={item} onOpen={onOpenPodcast} onPlay={async (podcast) => { if (!podcast.latest_episode_id) return; const { data } = await supabase.rpc('list_podcast_episodes', { podcast_ref: podcast.id, page_limit: 1, page_offset: 0 }); const ep = ((data as Episode[]) || []).find(e => e.id === podcast.latest_episode_id) || ((data as Episode[]) || [])[0]; if (ep) onPlayEpisode({ ...ep, podcast_title: podcast.title, creator_name: podcast.creator_name }) }} onOpenProfile={onOpenProfile} />)}</div>
+        {items.length < totalCount && <div className="podcast-load-more"><button onClick={() => load(pageOffset + PAGE_LIMIT, true)} disabled={loadingMore}>{loadingMore ? 'Loading...' : 'Load more podcasts'}</button></div>}
+      </>}
     </div>}
   </section></div>
 }
