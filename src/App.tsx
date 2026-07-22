@@ -25,7 +25,7 @@ type RecentMessage = { id:string;body:string;created_at:string;profiles?:{full_n
 type Friendship = { id:string; requester_id:string; addressee_id:string; status:string }
 type NextSession = { id:string; title:string; starts_at:string; host_id:string }
 type Feature = 'discover'|'people'|'healers'|'profile'|'notifications'|'messages'|'safety'|'connections'|'sessions'|'ai'|'podcasts'
-type AppRoute = { feature: Feature | null; roomId: string | null; profileId: string | null; podcastId: string | null; episodeId: string | null; podcastStudio: boolean; studioAction: string | null; studioPodcastId: string | null; studioEpisodeId: string | null; notFound: boolean }
+type AppRoute = { feature: Feature | null; roomId: string | null; profileId: string | null; podcastId: string | null; episodeId: string | null; podcastStudio: boolean; studioAction: string | null; studioPodcastId: string | null; studioEpisodeId: string | null; sessionId: string | null; sessionView: string | null; notFound: boolean }
 
 const BASE_URL = import.meta.env.VITE_BASE_URL || 'https://shirkan84.github.io/NovaResort/'
 const BASE_PATH = import.meta.env.VITE_BASE_PATH || '/NovaResort'
@@ -35,7 +35,7 @@ function routeFromHash(): AppRoute {
     .replace(new RegExp('^' + BASE_PATH.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '/?'), '')
     .replace(/^\/+|\/+$/g, '')
   const value = decodeURIComponent(window.location.hash.replace(/^#\/?/, '') || pathRoute || 'home')
-  const base = { feature: null, roomId: null, profileId: null, podcastId: null, episodeId: null, podcastStudio: false, studioAction: null as string | null, studioPodcastId: null as string | null, studioEpisodeId: null as string | null, notFound: false }
+  const base = { feature: null, roomId: null, profileId: null, podcastId: null, episodeId: null, podcastStudio: false, studioAction: null as string | null, studioPodcastId: null as string | null, studioEpisodeId: null as string | null, sessionId: null as string | null, sessionView: null as string | null, notFound: false }
   if (value.startsWith('room/')) return { ...base, roomId: value.slice(5) || null }
   if (value.startsWith('profile/')) return { ...base, profileId: value.slice(8) || null }
   if (value === 'podcasts/manage') return { ...base, feature: 'podcasts', podcastStudio: true, studioAction: 'list' }
@@ -61,6 +61,13 @@ function routeFromHash(): AppRoute {
   if (value === 'connections') return { ...base, feature: 'connections' }
   if (value === 'messages') return { ...base, feature: 'messages' }
   if (value === 'ai' || value.startsWith('ai/')) return { ...base, feature: 'ai' }
+  if (value.startsWith('sessions/')) {
+    const parts = value.split('/')
+    const sId = parts[1] || null
+    if (parts[2] === 'room') return { ...base, feature: 'sessions', sessionId: sId, sessionView: 'room' }
+    if (sId) return { ...base, feature: 'sessions', sessionId: sId, sessionView: 'detail' }
+    return { ...base, feature: 'sessions' }
+  }
   if (value === 'sessions' || value === 'sessions/upcoming') return { ...base, feature: 'sessions' }
   if (value === 'notifications') return { ...base, feature: 'notifications' }
   if (value === 'profile' || value === 'settings') return { ...base, feature: 'profile' }
@@ -587,7 +594,7 @@ function App() {
     {feature==='ai' && <AICompanion userId={session.user.id} onClose={closeOverlay}/>} 
     {feature==='podcasts' && <PodcastPlatform userId={session.user.id} isHealer={canCreateContent} podcastId={route.podcastId} episodeId={route.episodeId} studio={route.podcastStudio} studioAction={route.studioAction} studioPodcastId={route.studioPodcastId} studioEpisodeId={route.studioEpisodeId} onClose={closeOverlay} onOpenPodcast={openPodcast} onOpenEpisode={openPodcastEpisode} onOpenProfile={openProfile} onPlayEpisode={setPodcastPlayer}/>} 
     {feature==='profile' && <EditProfile userId={session.user.id} onClose={closeOverlay}/>} 
-    {feature==='sessions' && <SessionsPage userId={session.user.id} isHealer={canCreateContent} onClose={closeOverlay}/>} 
+    {feature==='sessions' && <SessionsPage userId={session.user.id} isHealer={canCreateContent} onClose={closeOverlay} initialSessionId={route.sessionId} initialSessionView={route.sessionView}/>} 
     {feature==='notifications' && <Notifications userId={session.user.id} onClose={closeOverlay}/>} 
     {feature==='safety' && <SafetyCenter onClose={closeOverlay}/>} 
     {profilePreview && <div className="feature-overlay"><section className="profile-window public-profile-window"><header><div><h2>{profileName(profilePreview)}</h2><p>{roleLabel(profilePreview)}{profilePreview.country?` · ${profilePreview.country}`:''}</p></div><button onClick={closeOverlay}><X/></button></header><div className="public-profile-body"><span className="avatar healer rose public-profile-avatar">{profilePreview.avatar_url?<img src={profilePreview.avatar_url} alt={`${profileName(profilePreview)} profile photo`} loading="lazy"/>:profileInitials(profileName(profilePreview))}<i className={profilePreview.online?'online':''}/></span><p>{profilePreview.about||'This member has not added an introduction yet.'}</p><div className="healer-tags">{[...(profilePreview.profile_type==='healer'?profilePreview.specialties||[]:[]),...(profilePreview.interests||[])].slice(0,6).map(tag=><span key={tag}>{tag}</span>)}</div><ProfilePreviewActions profile={profilePreview} friendships={friendships} userId={session.user.id} onConnect={connectWith} onMessage={startPrivateMessage} onSessions={()=>openFeature('sessions')} onCreatePodcast={()=>openPodcast('manage')} onCreateSession={()=>openFeature('sessions')}/></div></section></div>}
