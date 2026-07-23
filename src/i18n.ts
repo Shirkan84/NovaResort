@@ -8,6 +8,8 @@ const he: Record<string,string> = {
   'Nova Resort is a peer-support community and is not a substitute for professional or emergency services.':'נובה ריזורט היא קהילת תמיכת עמיתים ואינה תחליף לשירותים מקצועיים או לשירותי חירום.',
   'Create your account':'יצירת חשבון','Reset your password':'איפוס סיסמה','Welcome to Nova Resort':'ברוכים הבאים לנובה ריזורט',
   'Join a community where you can feel seen and supported.':'הצטרפו לקהילה שבה אפשר להרגיש שרואים אתכם ותומכים בכם.',
+  'Create Your Account':'יצירת חשבון','Choose the profile you would like to use when registering for Nova Resort.':'בחרו את הפרופיל שבו תרצו להשתמש בעת ההרשמה לנובה ריזורט.',
+  'Member Profile':'פרופיל חבר קהילה','Healer Profile':'פרופיל מטפל/ת',
   'We’ll send a secure reset link to your email.':'נשלח קישור מאובטח לאיפוס הסיסמה לדוא״ל שלכם.',
   'Sign in to return to your community.':'התחברו כדי לחזור לקהילה שלכם.',
   'Full name':'שם מלא','Country':'מדינה','Profile type':'סוג פרופיל','Community member':'חבר/ת קהילה','Healer / Therapist':'מטפל/ת',

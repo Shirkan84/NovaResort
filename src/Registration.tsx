@@ -62,9 +62,9 @@ export function RegistrationChooser() {
   const [hovered, setHovered] = useState<string|null>(null)
   return <div className="auth-page"><button className="language-toggle auth-language" onClick={()=>{}}>🌐 EN</button>
     <div className="auth-brand"><Logo/><div className="auth-hero-copy"><span className="auth-kicker"><Sparkles size={13}/> JOIN NOVA RESORT</span><h1>How would you like<br/>to <em>join us?</em></h1><p>Choose the path that feels right for you. Both roles give you full access to our caring community.</p><div className="auth-values"><span><Heart/>Kind connection</span><span><ShieldCheck/>Safety first</span><span><Leaf/>Space to grow</span></div></div><p className="auth-disclaimer">Nova Resort is a peer-support community and is not a substitute for professional or emergency services.</p></div>
-    <div className="auth-panel"><div className="auth-mobile-logo"><Logo/></div><div className="auth-form-wrap"><span className="welcome-icon"><Leaf size={22}/></span>
-      <h2>Join Nova Resort</h2>
-      <p>Select how you would like to participate in the community.</p>
+    <div className="auth-panel"><div className="auth-mobile-logo"><Logo/></div><div className="auth-form-wrap">      <span className="welcome-icon"><Leaf size={22}/></span>
+      <h2>Create Your Account</h2>
+      <p>Choose the profile you would like to use when registering for Nova Resort.</p>
       <div className="registration-chooser">
         <button
           className={`chooser-card ${hovered === 'member' ? 'hovered' : ''}`}
@@ -73,7 +73,7 @@ export function RegistrationChooser() {
           onClick={() => setAuthRoute('register/member')}
         >
           <div className="chooser-icon member"><User size={28}/></div>
-          <h3>Join as a Member</h3>
+          <h3>Member Profile</h3>
           <p>Connect with healers, join sessions, and be part of a caring community.</p>
           <ul>
             <li>Discover healers and wellness professionals</li>
@@ -90,7 +90,7 @@ export function RegistrationChooser() {
           onClick={() => setAuthRoute('register/healer')}
         >
           <div className="chooser-icon healer"><Briefcase size={28}/></div>
-          <h3>Join as a Healer</h3>
+          <h3>Healer Profile</h3>
           <p>Share your expertise, host sessions, and create wellness content.</p>
           <ul>
             <li>Host live sessions and workshops</li>
