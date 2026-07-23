@@ -64,6 +64,7 @@ export function HealerDashboard({userId,onOpenSession,onCreateSession,onClose}:{
   const [episodes,setEpisodes]=useState<PodcastEpisode[]>([])
   const [notifications,setNotifications]=useState<Notification[]>([])
   const [privateRooms,setPrivateRooms]=useState<PrivateRoom[]>([])
+  const [healerStats,setHealerStats]=useState<{follower_count:number;review_count:number;avg_rating:number|null;profile_view_count:number}|null>(null)
   const [loading,setLoading]=useState(true)
   const [error,setError]=useState('')
   const [activeTab,setActiveTab]=useState<'overview'|'sessions'|'connections'|'podcasts'|'activity'>('overview')
@@ -91,6 +92,12 @@ export function HealerDashboard({userId,onOpenSession,onCreateSession,onClose}:{
       try{
         const {data:rooms}=await supabase.rpc('list_private_rooms')
         if(rooms)setPrivateRooms(rooms as PrivateRoom[])
+      }catch{}
+
+      // Load healer-specific stats
+      try{
+        const {data:stats}=await supabase.rpc('get_healer_dashboard_stats',{target_healer:userId})
+        if(stats)setHealerStats(stats as any)
       }catch{}
     }catch(e:any){setError(e.message||'Failed to load dashboard')}finally{setLoading(false)}
   },[userId])
@@ -193,8 +200,14 @@ export function HealerDashboard({userId,onOpenSession,onCreateSession,onClose}:{
           <Users size={18}/><div><b>{totalRegs}</b><span>Total Registrations</span></div>
         </div>
         <div className="hd-metric" onClick={()=>setActiveTab('connections')}>
-          <Link2 size={18}/><div><b>{connections.length}</b><span>Connections</span></div>
+          <Heart size={18}/><div><b>{healerStats?.follower_count||connections.length}</b><span>Followers</span></div>
         </div>
+        {healerStats?.avg_rating!==null&&<div className="hd-metric">
+          <Star size={18}/><div><b>{healerStats!.avg_rating?.toFixed(1)}</b><span>Rating ({healerStats!.review_count})</span></div>
+        </div>}
+        {healerStats?.profile_view_count!==undefined&&<div className="hd-metric">
+          <Eye size={18}/><div><b>{healerStats.profile_view_count}</b><span>Profile Views (30d)</span></div>
+        </div>}
         {podcasts.length>0&&<div className="hd-metric" onClick={()=>setActiveTab('podcasts')}>
           <Headphones size={18}/><div><b>{publishedPodcasts.length}</b><span>Podcasts</span></div>
         </div>}

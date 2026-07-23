@@ -18,6 +18,7 @@ import './healer-dashboard.css'
 import { PodcastPlatform, PodcastMiniPlayer, PopularPodcastsStrip, ProfilePodcastSection, PlayerEpisode } from './PodcastPlatform'
 import { getFeaturedHealers } from './services/healers'
 import { useUserRole } from './hooks/useUserRole'
+import { HealerProfile } from './HealerProfile'
 import { applyLanguage, getLanguage, switchLanguage } from './i18n'
 import { RegistrationChooser, MemberRegistration, HealerRegistration, CheckEmail, AuthCallbackHandler } from './Registration'
 import './registration.css'
@@ -503,7 +504,40 @@ function App() {
     {feature==='safety' && <SafetyCenter onClose={closeOverlay}/>} 
     {feature==='feedback' && <FeedbackForm onClose={closeOverlay}/>} 
     {feature==='feedback-admin' && <FeedbackAdmin onClose={closeOverlay}/>} 
-    {profilePreview && <div className="feature-overlay"><section className="profile-window public-profile-window"><header><div><h2>{profileName(profilePreview)}</h2><p>{roleLabel(profilePreview)}{profilePreview.country?` · ${profilePreview.country}`:''}</p></div><button onClick={closeOverlay}><X/></button></header><div className="public-profile-body"><span className="avatar healer rose public-profile-avatar">{profilePreview.avatar_url?<img src={profilePreview.avatar_url} alt={`${profileName(profilePreview)} profile photo`} loading="lazy"/>:profileInitials(profileName(profilePreview))}<i className={profilePreview.online?'online':''}/></span><p>{profilePreview.about||'This member has not added an introduction yet.'}</p><div className="healer-tags">{[...(profilePreview.profile_type==='healer'?profilePreview.specialties||[]:[]),...(profilePreview.interests||[])].slice(0,6).map(tag=><span key={tag}>{tag}</span>)}</div><ProfilePreviewActions profile={profilePreview} friendships={friendships} userId={session.user.id} onConnect={connectWith} onMessage={startPrivateMessage} onSessions={()=>openFeature('sessions')} onCreatePodcast={()=>openPodcast('manage')} onCreateSession={()=>openFeature('sessions')}/></div></section></div>}
+    {profilePreview && profilePreview.profile_type === 'healer' && (
+      <HealerProfile
+        healerId={profilePreview.id}
+        currentUserId={session.user.id}
+        onClose={closeOverlay}
+        onOpenSessions={() => openFeature('sessions')}
+        onOpenPodcast={openPodcast}
+        onMessage={(h) => startPrivateMessage(h as LiveProfile)}
+      />
+    )}
+    {profilePreview && profilePreview.profile_type !== 'healer' && (
+      <div className="feature-overlay" onClick={(e) => e.target === e.currentTarget && closeOverlay()}>
+        <section className="profile-window public-profile-window">
+          <header>
+            <div>
+              <h2>{profileName(profilePreview)}</h2>
+              <p>{roleLabel(profilePreview)}{profilePreview.country ? ` · ${profilePreview.country}` : ''}</p>
+            </div>
+            <button onClick={closeOverlay}><X /></button>
+          </header>
+          <div className="public-profile-body">
+            <span className="avatar healer rose public-profile-avatar">
+              {profilePreview.avatar_url ? <img src={profilePreview.avatar_url} alt={`${profileName(profilePreview)} profile photo`} loading="lazy" /> : profileInitials(profileName(profilePreview))}
+              <i className={profilePreview.online ? 'online' : ''} />
+            </span>
+            <p>{profilePreview.about || 'This member has not added an introduction yet.'}</p>
+            <div className="healer-tags">
+              {[...(profilePreview.profile_type === 'healer' ? profilePreview.specialties || [] : []), ...(profilePreview.interests || [])].slice(0, 6).map(tag => <span key={tag}>{tag}</span>)}
+            </div>
+            <ProfilePreviewActions profile={profilePreview} friendships={friendships} userId={session.user.id} onConnect={connectWith} onMessage={startPrivateMessage} onSessions={() => openFeature('sessions')} onCreatePodcast={() => openPodcast('manage')} onCreateSession={() => openFeature('sessions')} />
+          </div>
+        </section>
+      </div>
+    )}
     {profilePreview && <div className="profile-podcast-sidecar"><ProfilePodcastSection profileId={profilePreview.id} onOpenPodcast={openPodcast}/></div>}
     <PodcastMiniPlayer episode={podcastPlayer} onClose={() => setPodcastPlayer(null)}/>
     {notice && <div className="toast"><ShieldCheck size={17}/>{notice}</div>}
