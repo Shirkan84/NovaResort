@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { CalendarDays, Compass, Clock3, Headphones, UsersRound, Sun, Mic, Video, MessageCircleMore, ChevronRight, Leaf, MessageSquareWarning, UserPlus, CircleUserRound, LockKeyhole, Send, MoreHorizontal } from 'lucide-react'
+import { CalendarDays, Compass, Clock3, Headphones, UsersRound, Sun, Mic, Video, MessageCircleMore, ChevronRight, Leaf, MessageSquareWarning, UserPlus, CircleUserRound, LockKeyhole, Send, MoreHorizontal, LayoutDashboard, Bookmark, History } from 'lucide-react'
 import { supabase } from './supabase'
 import { PopularPodcastsStrip } from './PodcastPlatform'
 import { getFeaturedHealers } from './services/healers'
@@ -179,6 +179,9 @@ export function Homepage({ userId, name, canCreateContent, liveHealers, healersL
 
         {/* Quick Actions */}
         <div className="quick-actions">
+          <button onClick={() => onOpenFeature('dashboard')}><LayoutDashboard size={16} /> My Dashboard</button>
+          <button onClick={() => onOpenFeature('favorites')}><Bookmark size={16} /> Favorites</button>
+          <button onClick={() => onOpenFeature('session-history')}><History size={16} /> My Sessions</button>
           <button onClick={() => onOpenFeature('discover')}><UsersRound size={16} /> Find people</button>
           <button onClick={onOpenHealers}><Sun size={16} /> Find a healer</button>
           <button onClick={() => onOpenPodcast()}><Headphones size={16} /> Podcasts</button>

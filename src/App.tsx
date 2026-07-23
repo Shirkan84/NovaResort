@@ -24,6 +24,10 @@ import { RegistrationChooser, MemberRegistration, HealerRegistration, CheckEmail
 import './registration.css'
 import './social-home.css'
 import { Homepage } from './Homepage'
+import { MemberDashboard } from './MemberDashboard'
+import { Favorites } from './Favorites'
+import { SessionHistory } from './SessionHistory'
+import './member-dashboard.css'
 
 type Room = {
   title: string; description: string; people: number; color: string; icon: string; tags: string[]
@@ -32,7 +36,7 @@ type LiveProfile = { id:string;full_name:string;display_name:string|null;avatar_
 type RecentMessage = { id:string;body:string;created_at:string;profiles?:{full_name:string;avatar_url:string|null}|null;rooms?:{id:string;name:string}|null }
 type Friendship = { id:string; requester_id:string; addressee_id:string; status:string }
 type NextSession = { id:string; title:string; starts_at:string; host_id:string }
-type Feature = 'discover'|'people'|'healers'|'profile'|'notifications'|'messages'|'safety'|'connections'|'sessions'|'podcasts'|'healer'|'feedback'|'feedback-admin'
+type Feature = 'discover'|'people'|'healers'|'profile'|'notifications'|'messages'|'safety'|'connections'|'sessions'|'podcasts'|'healer'|'feedback'|'feedback-admin'|'dashboard'|'favorites'|'session-history'
 type AuthView = 'login'|'register'|'register-member'|'register-healer'|'check-email'|'callback'|null
 type AppRoute = { feature: Feature | null; roomId: string | null; profileId: string | null; podcastId: string | null; episodeId: string | null; podcastStudio: boolean; studioAction: string | null; studioPodcastId: string | null; studioEpisodeId: string | null; sessionId: string | null; sessionView: string | null; authView: AuthView; notFound: boolean }
 
@@ -90,10 +94,12 @@ function routeFromHash(): AppRoute {
   }
   if (value === 'sessions' || value === 'sessions/upcoming') return { ...base, feature: 'sessions' }
   if (value === 'notifications') return { ...base, feature: 'notifications' }
+  if (value === 'favorites') return { ...base, feature: 'favorites' }
+  if (value === 'session-history') return { ...base, feature: 'session-history' }
   if (value === 'profile' || value === 'settings') return { ...base, feature: 'profile' }
   if (value === 'safety' || value === 'community-guidelines' || value === 'privacy' || value === 'terms') return { ...base, feature: 'safety' }
-  if (value !== 'home' && value !== '') return { ...base, notFound: true }
-  return base
+  if (value === 'home' || value === '' || value === 'dashboard') return base
+  return { ...base, notFound: true }
 }
 
 function setRoute(path: string) {
@@ -116,6 +122,9 @@ function navFromFeature(feature: Feature | null) {
   if (feature === 'notifications') return 'Home'
   if (feature === 'safety') return 'Home'
   if (feature === 'profile') return 'Settings'
+  if (feature === 'dashboard') return 'Home'
+  if (feature === 'favorites') return 'Home'
+  if (feature === 'session-history') return 'Sessions'
   return 'Home'
 }
 
@@ -477,7 +486,19 @@ function App() {
       <div className="content">
         {route.notFound ? <section className="welcome"><div style={{gridColumn:'1/-1',textAlign:'center',padding:'80px 20px'}}><p className="eyebrow">PAGE NOT FOUND</p><h1>This page doesn't exist.</h1><p className="platform-intro">The link you followed may be broken or the page may have been removed.</p><div className="welcome-actions" style={{justifyContent:'center'}}><button className="primary" onClick={closeOverlay}><Home size={17}/> Go to homepage</button></div></div></section> :
         <>
+        {feature === 'dashboard' ? (
+          <MemberDashboard
+            userId={session.user.id}
+            name={name}
+            onOpenFeature={(f) => openFeature(f as Feature)}
+            onOpenProfile={openProfile}
+            onOpenPodcast={openPodcast}
+            onPlayEpisode={setPodcastPlayer}
+            onNotice={act}
+          />
+        ) : (
         <Homepage userId={session.user.id} name={name} canCreateContent={canCreateContent} liveHealers={liveHealers} healersLoading={healersLoading} healersError={healersError} recentMessages={recentMessages} friendships={friendships} dbRooms={dbRooms} showAllRooms={showAllRooms} onToggleRooms={() => setShowAllRooms(!showAllRooms)} onOpenFeature={(f) => openFeature(f as Feature)} onOpenRoom={openRoom} onOpenProfile={openProfile} onOpenHealers={openHealers} onOpenPodcast={openPodcast} onPlayEpisode={setPodcastPlayer} onConnect={connectWith} onMessage={startPrivateMessage} onNotice={act} />
+        )}
         <footer className="app-footer">
           <div className="footer-about"><b>nova resort</b><p>A safe space to connect, reflect, and grow. Nova Resort is a peer-support community and wellness platform.</p><div className="footer-social"><a href="#" aria-label="Email">✉</a><a href="#" aria-label="Community">♡</a></div></div>
           <div className="footer-col"><h4>Explore</h4><ul><li><button onClick={() => openFeature('discover')}>Discover People</button></li><li><button onClick={openHealers}>Healers</button></li><li><button onClick={() => openFeature('sessions')}>Sessions</button></li><li><button onClick={() => openPodcast()}>Podcasts</button></li><li><button onClick={() => openFeature('people')}>Community Rooms</button></li></ul></div>
@@ -501,6 +522,8 @@ function App() {
     {feature==='sessions' && <SessionsPage userId={session.user.id} isHealer={canCreateContent} onClose={closeOverlay} initialSessionId={route.sessionId} initialSessionView={route.sessionView}/>} 
     {feature==='healer' && <HealerDashboard userId={session.user.id} onOpenSession={(id)=>{closeOverlay();openFeature('sessions');setTimeout(()=>setRoute(`sessions/${id}`),50)}} onCreateSession={()=>{closeOverlay();openFeature('sessions');setTimeout(()=>setRoute('sessions'),100)}} onClose={closeOverlay}/>} 
     {feature==='notifications' && <Notifications userId={session.user.id} onClose={closeOverlay}/>} 
+    {feature==='favorites' && <Favorites userId={session.user.id} onClose={closeOverlay} onOpenProfile={openProfile} onOpenPodcast={openPodcast} onOpenFeature={(f)=>openFeature(f as Feature)} onNotice={act}/>} 
+    {feature==='session-history' && <SessionHistory userId={session.user.id} onClose={closeOverlay} onNotice={act}/>} 
     {feature==='safety' && <SafetyCenter onClose={closeOverlay}/>} 
     {feature==='feedback' && <FeedbackForm onClose={closeOverlay}/>} 
     {feature==='feedback-admin' && <FeedbackAdmin onClose={closeOverlay}/>} 
