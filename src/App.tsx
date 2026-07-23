@@ -22,6 +22,7 @@ import { applyLanguage, getLanguage, switchLanguage } from './i18n'
 import { RegistrationChooser, MemberRegistration, HealerRegistration, CheckEmail, AuthCallbackHandler } from './Registration'
 import './registration.css'
 import './social-home.css'
+import { Homepage } from './Homepage'
 
 type Room = {
   title: string; description: string; people: number; color: string; icon: string; tags: string[]
@@ -473,83 +474,18 @@ function App() {
       </header>
 
       <div className="content">
-        {route.notFound ? <section className="welcome"><div style={{gridColumn:'1/-1',textAlign:'center',padding:'80px 20px'}}><p className="eyebrow">PAGE NOT FOUND</p><h1>This page doesn't exist.</h1><p className="platform-intro">The link you followed may be broken or the page may have been removed.</p><div className="welcome-actions" style={{justifyContent:'center'}}><button className="primary" onClick={closeOverlay}><Home size={17}/> Go to homepage</button></div></div></section> : <>
-        <section className="welcome">
-          <div><p className="eyebrow">WELCOME TO NOVA RESORT</p><h1>Good to see you, {name.split(' ')[0]} <span>✦</span></h1><p className="platform-intro">A caring space where members and wellness professionals connect, talk, heal, grow, and support one another. Therapists, healers, and coaches can also host <mark>online sessions and workshops</mark> for the community.</p></div>
-          <div className="welcome-actions"><button className="primary" onClick={() => openFeature('people')}><Compass size={17}/> Explore the community</button><button className="secondary-cta" onClick={() => setRoute('members')}><UsersRound size={17}/> Discover Members</button></div>
-        </section>
-
-        <div className="stats">
-          <div><span className="stat-icon green"><UsersRound/></span><p><b>{metrics.online}</b><small>Members online</small></p><em>{metrics.members} registered</em></div>
-          <button className="stat-link" onClick={openHealers}><span className="stat-icon purple"><Sun/></span><p><b>{metrics.healers}</b><small>Healers available</small></p><em>Registered guides</em></button>
-          <div><span className="stat-icon amber"><MessageCircleMore/></span><p><b>{metrics.rooms}</b><small>Active rooms</small></p><em>Join anytime</em></div>
-          <div><span className="stat-icon blue"><CalendarDays/></span><p><b>{metrics.sessions}</b><small>Upcoming sessions</small></p><button onClick={() => openFeature('sessions')}>View sessions</button></div>
-        </div>
-
-        <div className="quick-actions">
-          <button onClick={() => openFeature('discover')}><UsersRound size={16}/> Find people</button>
-          <button onClick={openHealers}><Sun size={16}/> Find a healer</button>
-          <button onClick={() => openFeature('podcasts')}><Headphones size={16}/> Podcasts</button>
-           <button onClick={() => openFeature('sessions')}><CalendarDays size={16}/> Sessions</button>
-          <button onClick={() => openFeature('messages')}><MessageCircleMore size={16}/> Private rooms</button>
-          {canCreateContent && <>
-            <button className="healer-action" onClick={() => openPodcast('manage')}><Mic size={16}/> Create Podcast</button>
-            <button className="healer-action" onClick={() => openFeature('sessions')}><Video size={16}/> Host a session</button>
-          </>}
-          <button onClick={() => openFeature('feedback')}><MessageSquareWarning size={16}/> Send Feedback</button>
-        </div>
-
-        <div className="layout">
-          <div className="main-col">
-            <section className="healer-section">
-              <div className="section-head"><div><button className="section-title-link" onClick={openHealers}><h2>Meet our healers</h2></button><p>Connect with registered wellness professionals, explore their profiles, and discover their upcoming sessions and workshops.</p></div><button onClick={openHealers}>View all healers <ChevronRight size={16}/></button></div>
-              {healersLoading?<div className="healer-strip"><div className="healer-card wide skeleton"/><div className="healer-card wide skeleton"/><div className="healer-card wide skeleton"/></div>:healersError?<div className="inline-empty">{healersError}</div>:liveHealers.length===0?<div className="inline-empty">No verified healers are available yet.</div>:<div className="healer-strip" role="list" aria-label="Registered healers">{liveHealers.map(h=>{const relation=relationshipFor(h.id,friendships),connectLabel=relation?.status==='accepted'?'Connected':relation?.status==='pending'&&relation.requester_id===session.user.id?'Request sent':relation?.status==='pending'?'Accept request':'Connect';return <article className="healer-card wide" role="listitem" key={h.id}>
-                <button className="healer-photo-button" onClick={()=>openProfile(h.id)} aria-label={`View ${profileName(h)} profile`}><span className="avatar healer rose">{h.avatar_url?<img src={h.avatar_url} alt={`${profileName(h)} profile photo`} loading="lazy" onError={event=>{event.currentTarget.style.display='none'}}/>:profileInitials(profileName(h))}<i className={h.online?'online':''}/><span className="sr-only">{h.online?'Online now':'Offline'}</span></span></button>
-                <div className="healer-info">
-                  <button className="healer-name" onClick={()=>openProfile(h.id)}>{profileName(h)}</button>
-                  <p>{roleLabel(h)}{h.country?` · ${h.country}`:''}</p>
-                  <div className="healer-tags">{(h.specialties||h.interests||['Emotional wellness']).slice(0,3).map(tag=><span key={tag}>{tag}</span>)}</div>
-                  <p className="healer-bio">{h.about||'Registered wellness professional in the Nova Resort community.'}</p>
-                  {h.next_session&&<button className="next-session" onClick={()=>openFeature('sessions')}><CalendarDays size={13}/><span>{h.next_session.title}</span><time>{new Date(h.next_session.starts_at).toLocaleString([], {dateStyle:'medium',timeStyle:'short'})}</time></button>}
-                  <div className="healer-actions"><button onClick={()=>openProfile(h.id)}>View profile</button><button onClick={()=>connectWith(h)} disabled={relation?.status==='accepted'}><UserPlus size={13}/>{connectLabel}</button><button onClick={()=>startPrivateMessage(h)}><MessageCircleMore size={13}/> Message</button>{h.next_session&&<button onClick={()=>openFeature('sessions')}>View sessions</button>}</div>
-                </div>
-              </article>})}</div>}
-            </section>
-
-            <PopularPodcastsStrip onOpenPodcast={openPodcast} onPlayEpisode={setPodcastPlayer} onOpenProfile={openProfile}/>
-
-            {canCreateContent && <HealerPodcastDashboard userId={session.user.id} onOpenStudio={() => openPodcast('manage')} onOpenPodcast={openPodcast}/>}
-
-            <section>
-              <div className="section-head"><div><h2>Find your space</h2><p>Join a conversation that feels right for you today.</p></div><button onClick={() => setShowAllRooms(!showAllRooms)}>{showAllRooms?'Show fewer rooms':'View all rooms'} <ChevronRight size={16}/></button></div>
-              <div className="room-grid">
-                {(dbRooms.length ? dbRooms.slice(0,showAllRooms?6:3).map(r=>({title:r.name,description:r.description,people:0,color:r.theme,icon:r.icon,tags:['Open','Live'],db:r})) : rooms.map(r=>({...r,db:null as DbRoom|null}))).map(room => <article className={`room-card ${room.color}`} key={room.title}>
-                  <div className="room-art"><span>{room.icon}</span><div className="bubble b1"></div><div className="bubble b2"></div><div className="bubble b3"></div></div>
-                  <div className="room-info"><div className="tags">{room.tags.map((t,i) => <span key={t} className={i === 0 ? 'open-tag' : ''}>{i === 0 && <i/>}{t}</span>)}</div><h3>{room.title}</h3><p>{room.description}</p><div className="room-bottom"><span><UsersRound size={15}/>{room.people ? `${room.people} here now` : 'Real-time room'}</span><button onClick={() => room.db ? openRoom(room.db) : act('Database setup is required first')}>Join room <ChevronRight size={15}/></button></div></div>
-                </article>)}
-              </div>
-            </section>
-
-            <section className="quote-card"><div className="quote-icon">“</div><div><p>“You don’t have to see the whole staircase. Just take the first step.”</p><span>A gentle reminder for today</span></div><Leaf size={55}/></section>
-          </div>
-
-          <aside className="right-col">
-            <section className="panel conversations"><div className="panel-head"><h3>Recent conversations</h3><button onClick={() => openFeature('messages')}>View all</button></div>
-              {recentMessages.length===0?<p className="mini-empty">No community messages yet.</p>:recentMessages.map(c => <button className="conversation" key={c.id} onClick={() => c.rooms&&openRoom({id:c.rooms.id,name:c.rooms.name,description:'Community conversation',icon:'♡',theme:'sage',is_private:false})}><div className="avatar soft">{c.profiles?.avatar_url?<img src={c.profiles.avatar_url} alt=""/>:(c.profiles?.full_name||'N').slice(0,1)}</div><div><b>{c.profiles?.full_name||'Community member'}</b><p>{c.body}</p></div><span>{new Date(c.created_at).toLocaleDateString()}</span></button>)}
-              <button className="new-message" onClick={() => openFeature('discover')}><Send size={16}/> Start a new message</button>
-            </section>
-
-            <section className="panel session"><div className="panel-head"><h3>Upcoming wellness sessions</h3><button onClick={()=>openFeature('sessions')}><MoreHorizontal size={18}/></button></div>
-              <div className="date-box"><b>{metrics.sessions}</b><span>OPEN</span></div><div className="session-copy"><h4>{metrics.sessions?'Sessions open now':'Create the first session'}</h4><p>{metrics.sessions?'Join a group event or host your own.':'Events can be public, private, live, or waitlisted.'}</p><span><Clock3 size={14}/> Community workshops and rooms</span></div>
-              <button className="join-session" onClick={() => openFeature('sessions')}><Video size={16}/> Open sessions</button>
-            </section>
-
-            <section className="checkin"><span><CircleUserRound size={21}/></span><div><h3>How are you feeling?</h3><p>A small check-in can make a big difference.</p><div className="moods">{['😔','😕','😐','🙂','😊'].map(x => <button key={x} onClick={() => act('Thank you for checking in')}>{x}</button>)}</div></div></section>
-
-            <section className="disclaimer"><LockKeyhole size={17}/><p><b>A safe space, not a medical service.</b> Nova Resort offers peer support and wellness connection. If you are in immediate danger, please contact local emergency services.</p></section>
-          </aside>
-        </div>
-        </>}
+        {route.notFound ? <section className="welcome"><div style={{gridColumn:'1/-1',textAlign:'center',padding:'80px 20px'}}><p className="eyebrow">PAGE NOT FOUND</p><h1>This page doesn't exist.</h1><p className="platform-intro">The link you followed may be broken or the page may have been removed.</p><div className="welcome-actions" style={{justifyContent:'center'}}><button className="primary" onClick={closeOverlay}><Home size={17}/> Go to homepage</button></div></div></section> :
+        <>
+        <Homepage userId={session.user.id} name={name} canCreateContent={canCreateContent} liveHealers={liveHealers} healersLoading={healersLoading} healersError={healersError} recentMessages={recentMessages} friendships={friendships} dbRooms={dbRooms} showAllRooms={showAllRooms} onToggleRooms={() => setShowAllRooms(!showAllRooms)} onOpenFeature={(f) => openFeature(f as Feature)} onOpenRoom={openRoom} onOpenProfile={openProfile} onOpenHealers={openHealers} onOpenPodcast={openPodcast} onPlayEpisode={setPodcastPlayer} onConnect={connectWith} onMessage={startPrivateMessage} onNotice={act} />
+        <footer className="app-footer">
+          <div className="footer-about"><b>nova resort</b><p>A safe space to connect, reflect, and grow. Nova Resort is a peer-support community and wellness platform.</p><div className="footer-social"><a href="#" aria-label="Email">✉</a><a href="#" aria-label="Community">♡</a></div></div>
+          <div className="footer-col"><h4>Explore</h4><ul><li><button onClick={() => openFeature('discover')}>Discover People</button></li><li><button onClick={openHealers}>Healers</button></li><li><button onClick={() => openFeature('sessions')}>Sessions</button></li><li><button onClick={() => openPodcast()}>Podcasts</button></li><li><button onClick={() => openFeature('people')}>Community Rooms</button></li></ul></div>
+          <div className="footer-col"><h4>Account</h4><ul><li><button onClick={() => openFeature('profile')}>My Profile</button></li><li><button onClick={() => openFeature('connections')}>Connections</button></li><li><button onClick={() => openFeature('messages')}>Messages</button></li><li><button onClick={() => openFeature('notifications')}>Notifications</button></li>{canCreateContent && <li><button onClick={() => openFeature('healer')}>Healer Dashboard</button></li>}</ul></div>
+          <div className="footer-col"><h4>Support</h4><ul><li><button onClick={() => openFeature('safety')}>Safety Center</button></li><li><button onClick={() => openFeature('feedback')}>Send Feedback</button></li><li><button onClick={() => openFeature('safety')}>Community Guidelines</button></li><li><button onClick={() => openFeature('safety')}>Privacy Policy</button></li><li><button onClick={() => openFeature('safety')}>Terms of Service</button></li></ul></div>
+          <div className="footer-bottom"><span>&copy; {new Date().getFullYear()} Nova Resort. All rights reserved.</span><span>Created by Shir Kanevsky</span></div>
+        </footer>
+        </>
+        }
       </div>
     </main>
     {menuOpen && <button className="backdrop" aria-label="Close menu" onClick={() => setMenuOpen(false)}/>} 
