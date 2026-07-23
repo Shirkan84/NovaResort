@@ -14,10 +14,10 @@ let activeProvider: LiveRoomProvider | null = null
 export function createLiveRoomProvider(providerType?: string): LiveRoomProvider {
   destroyLiveRoomProvider()
 
-  if (providerType === 'jitsi') {
-    activeProvider = new JitsiLiveRoomProvider()
-  } else {
+  if (providerType === 'mock') {
     activeProvider = new MockLiveRoomProvider()
+  } else {
+    activeProvider = new JitsiLiveRoomProvider()
   }
 
   return activeProvider

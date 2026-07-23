@@ -21,6 +21,7 @@ export class JitsiLiveRoomProvider implements LiveRoomProvider {
   private _isScreenSharing = false
   private api: any = null
   private containerEl: HTMLElement | null = null
+  private roomName = ''
 
   /** Maps Supabase UUID → Jitsi participant ID */
   private uuidToJitsi = new Map<string, string>()
@@ -34,8 +35,13 @@ export class JitsiLiveRoomProvider implements LiveRoomProvider {
   }
 
   async join(): Promise<void> {
-    const { error } = await supabase.rpc('join_session_room', { target_session: this.sessionId })
+    const { data, error } = await supabase.rpc('join_session_room', { target_session: this.sessionId })
     if (error) throw new Error(error.message)
+
+    const result = data as { role: string; provider_room_name: string; room_status: string }
+    if (!result?.provider_room_name) throw new Error('Room not available.')
+
+    this.roomName = result.provider_room_name
 
     if (!window.JitsiMeetExternalAPI) {
       await new Promise<void>((resolve, reject) => {
@@ -51,11 +57,9 @@ export class JitsiLiveRoomProvider implements LiveRoomProvider {
     this.containerEl = document.getElementById('jitsi-container')
     if (!this.containerEl) throw new Error('Jitsi container not found')
 
-    const roomName = `NovaResort-${this.sessionId.slice(0, 8)}`
-
     this.api = new window.JitsiMeetExternalAPI('meet.jit.si', {
       parentNode: this.containerEl,
-      roomName,
+      roomName: this.roomName,
       userInfo: { displayName: this.userId, id: this.userId },
       configOverwrite: {
         startAudioOnly: false,
@@ -265,6 +269,9 @@ export class JitsiLiveRoomProvider implements LiveRoomProvider {
     this.api?.dispose()
     this.api = null
     this.containerEl = null
+    if (this.sessionId) {
+      supabase.rpc('leave_session_room', { target_session: this.sessionId }).then(() => {}, () => {})
+    }
     if (this.channel) {
       supabase.removeChannel(this.channel)
       this.channel = null

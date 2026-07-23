@@ -174,9 +174,12 @@ export function MemberRegistration() {
       if (signUpError) throw signUpError
 
       if (data.session) {
-        await supabase.auth.signOut()
+        sessionStorage.removeItem('nova_reg_email')
+        setRoute('home')
+      } else {
+        sessionStorage.setItem('nova_reg_email', email)
+        setAuthRoute('check-email')
       }
-      setAuthRoute('check-email')
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Registration failed. Please try again.'
       if (msg.includes('already registered') || msg.includes('already been registered')) {
@@ -319,9 +322,12 @@ export function HealerRegistration() {
       if (signUpError) throw signUpError
 
       if (data.session) {
-        await supabase.auth.signOut()
+        sessionStorage.removeItem('nova_reg_email')
+        setRoute('home')
+      } else {
+        sessionStorage.setItem('nova_reg_email', email)
+        setAuthRoute('check-email')
       }
-      setAuthRoute('check-email')
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Registration failed. Please try again.'
       if (msg.includes('already registered') || msg.includes('already been registered')) {
@@ -407,11 +413,16 @@ export function HealerRegistration() {
 // ============================================================
 // CHECK EMAIL SCREEN
 // ============================================================
-export function CheckEmail({ email }: { email?: string | null }) {
+export function CheckEmail({ email: emailProp }: { email?: string | null }) {
   const [resendLoading, setResendLoading] = useState(false)
   const [resendMessage, setResendMessage] = useState('')
   const [resendError, setResendError] = useState('')
   const [cooldown, setCooldown] = useState(0)
+  const email = emailProp || sessionStorage.getItem('nova_reg_email') || null
+
+  useEffect(() => {
+    if (email && email !== emailProp) sessionStorage.removeItem('nova_reg_email')
+  }, [])
 
   useEffect(() => {
     if (cooldown <= 0) return
@@ -477,6 +488,7 @@ export function AuthCallbackHandler() {
         const url = new URL(window.location.href)
         const code = url.searchParams.get('code')
         if (code) {
+          window.history.replaceState({}, '', window.location.pathname + window.location.hash)
           const { error } = await supabase.auth.exchangeCodeForSession(code)
           if (error) throw error
         }

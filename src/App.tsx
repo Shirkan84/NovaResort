@@ -38,6 +38,8 @@ const BASE_URL = import.meta.env.VITE_BASE_URL || 'https://shirkan84.github.io/N
 const BASE_PATH = import.meta.env.VITE_BASE_PATH || '/NovaResort'
 
 function routeFromHash(): AppRoute {
+  const urlParams = new URLSearchParams(window.location.search)
+  if (urlParams.get('code')) return { feature: null, roomId: null, profileId: null, podcastId: null, episodeId: null, podcastStudio: false, studioAction: null, studioPodcastId: null, studioEpisodeId: null, sessionId: null, sessionView: null, authView: 'callback', notFound: false }
   const pathRoute = window.location.pathname
     .replace(new RegExp('^' + BASE_PATH.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '/?'), '')
     .replace(/^\/+|\/+$/g, '')

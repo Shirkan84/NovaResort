@@ -170,7 +170,7 @@ DECLARE
   last_name_val text := COALESCE(reg->>'last_name', '');
   display_val text := CASE WHEN first_name_val != '' AND last_name_val != '' THEN first_name_val || ' ' || last_name_val ELSE split_part(new.email, '@', 1) END;
 BEGIN
-  -- Shared profiles row: account_status = email_pending
+  -- Shared profiles row: account_status depends on whether email is already confirmed
   INSERT INTO public.profiles (
     id, full_name, display_name, email, country, city,
     profile_type, account_status, professional_verification_status
@@ -183,7 +183,7 @@ BEGIN
     NULLIF(reg->>'location', ''),
     NULLIF(reg->>'location', ''),
     resolved_type,
-    'email_pending',
+    CASE WHEN new.email_confirmed_at IS NOT NULL THEN 'active' ELSE 'email_pending' END,
     CASE WHEN resolved_type = 'healer' THEN 'approved' ELSE 'unverified' END
   )
   ON CONFLICT (id) DO NOTHING;

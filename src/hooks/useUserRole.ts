@@ -47,6 +47,6 @@ export function useUserRole(sessionUserId: string | null): UserRole {
     isMember: accountType === 'member',
     isHealer: accountType === 'healer',
     isAdmin: accountType === 'admin',
-    canCreateContent: accountType === 'healer' || accountType === 'admin',
+    canCreateContent: (accountType === 'healer' || accountType === 'admin') && profile?.account_status === 'active',
   }
 }

@@ -21,7 +21,7 @@ export interface LiveRoomChatMessage {
 }
 
 export interface LiveRoomState {
-  status: 'waiting' | 'live' | 'ended'
+  status: 'waiting' | 'live' | 'closed' | 'ended'
   startedAt: string | null
   endedAt: string | null
   participantCount: number
