@@ -19,6 +19,8 @@ import { PodcastPlatform, PodcastMiniPlayer, PopularPodcastsStrip, ProfilePodcas
 import { getFeaturedHealers } from './services/healers'
 import { useUserRole } from './hooks/useUserRole'
 import { applyLanguage, getLanguage, switchLanguage } from './i18n'
+import { RegistrationChooser, MemberRegistration, HealerRegistration, CheckEmail, AuthCallbackHandler } from './Registration'
+import './registration.css'
 import './social-home.css'
 
 type Room = {
@@ -29,7 +31,8 @@ type RecentMessage = { id:string;body:string;created_at:string;profiles?:{full_n
 type Friendship = { id:string; requester_id:string; addressee_id:string; status:string }
 type NextSession = { id:string; title:string; starts_at:string; host_id:string }
 type Feature = 'discover'|'people'|'healers'|'profile'|'notifications'|'messages'|'safety'|'connections'|'sessions'|'podcasts'|'healer'|'feedback'|'feedback-admin'
-type AppRoute = { feature: Feature | null; roomId: string | null; profileId: string | null; podcastId: string | null; episodeId: string | null; podcastStudio: boolean; studioAction: string | null; studioPodcastId: string | null; studioEpisodeId: string | null; sessionId: string | null; sessionView: string | null; notFound: boolean }
+type AuthView = 'login'|'register'|'register-member'|'register-healer'|'check-email'|'callback'|null
+type AppRoute = { feature: Feature | null; roomId: string | null; profileId: string | null; podcastId: string | null; episodeId: string | null; podcastStudio: boolean; studioAction: string | null; studioPodcastId: string | null; studioEpisodeId: string | null; sessionId: string | null; sessionView: string | null; authView: AuthView; notFound: boolean }
 
 const BASE_URL = import.meta.env.VITE_BASE_URL || 'https://shirkan84.github.io/NovaResort/'
 const BASE_PATH = import.meta.env.VITE_BASE_PATH || '/NovaResort'
@@ -39,7 +42,13 @@ function routeFromHash(): AppRoute {
     .replace(new RegExp('^' + BASE_PATH.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '/?'), '')
     .replace(/^\/+|\/+$/g, '')
   const value = decodeURIComponent(window.location.hash.replace(/^#\/?/, '') || pathRoute || 'home')
-  const base = { feature: null, roomId: null, profileId: null, podcastId: null, episodeId: null, podcastStudio: false, studioAction: null as string | null, studioPodcastId: null as string | null, studioEpisodeId: null as string | null, sessionId: null as string | null, sessionView: null as string | null, notFound: false }
+  const base = { feature: null, roomId: null, profileId: null, podcastId: null, episodeId: null, podcastStudio: false, studioAction: null as string | null, studioPodcastId: null as string | null, studioEpisodeId: null as string | null, sessionId: null as string | null, sessionView: null as string | null, authView: null as AuthView, notFound: false }
+  if (value === 'login') return { ...base, authView: 'login' }
+  if (value === 'register') return { ...base, authView: 'register' }
+  if (value === 'register/member') return { ...base, authView: 'register-member' }
+  if (value === 'register/healer') return { ...base, authView: 'register-healer' }
+  if (value === 'check-email') return { ...base, authView: 'check-email' }
+  if (value === 'auth/callback') return { ...base, authView: 'callback' }
   if (value.startsWith('room/')) return { ...base, roomId: value.slice(5) || null }
   if (value.startsWith('profile/')) return { ...base, profileId: value.slice(8) || null }
   if (value === 'podcasts/manage') return { ...base, feature: 'podcasts', podcastStudio: true, studioAction: 'list' }
@@ -163,18 +172,10 @@ const relationshipFor = (id:string, rows:Friendship[]) => rows.find(row => row.r
 
 function AuthScreen() {
   const language = getLanguage()
-  const [mode, setMode] = useState<'login'|'register'|'reset'>('login')
-  const [profileType, setProfileType] = useState('member')
-  const [professionalTitle, setProfessionalTitle] = useState('')
+  const [mode, setMode] = useState<'login'|'reset'>('login')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  const professionalTitles = ['Psychologist','Therapist','Life Coach','Mental Health Counselor','Meditation Teacher','Mindfulness Coach','Holistic Therapist','Social Worker','Wellness Practitioner','Other']
-  const specialties = ['Anxiety','Depression','Trauma','PTSD','Grief','Relationships','Marriage Counseling','Family Therapy','Parenting','ADHD','Addiction Recovery','Stress Management','Burnout','Mindfulness','Meditation','Self-Esteem','Personal Growth','Emotional Healing','Spiritual Guidance','Sleep',"Women's Health","Men's Health",'Teen Support','Career Coaching','Life Coaching','Wellness','Nutrition','Breathwork','Yoga','Other']
-  const languages = ['English','Hebrew','Arabic','Spanish','French','Russian','German','Portuguese','Italian','Other']
-  const cleanList = (value:FormDataEntryValue|null) => String(value||'').split(',').map(item=>item.trim()).filter(Boolean)
-  const parseEntries = (value:FormDataEntryValue|null, keys:string[]) => String(value||'').split('\n').map(line=>line.trim()).filter(Boolean).map(line=>{const parts=line.split('|').map(item=>item.trim());return keys.reduce((entry,key,index)=>({...entry,[key]:parts[index]||''}),{} as Record<string,string>)})
-  const safeFileName = (name:string) => name.replace(/[^a-zA-Z0-9._-]/g,'-')
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -183,60 +184,7 @@ function AuthScreen() {
     const password = String(data.get('password') || '')
     setLoading(true); setError(''); setMessage('')
     try {
-      if (mode === 'register') {
-        const fullName = String(data.get('fullName') || '').trim()
-        const requestedType = String(data.get('profileType') || 'member')
-        if (password !== String(data.get('confirmPassword') || '')) throw new Error('Passwords do not match.')
-        if (!data.get('guidelines')) throw new Error('Please accept the community guidelines.')
-        const healerDocuments = Array.from(data.getAll('healerDocuments')).filter((item): item is File => item instanceof File && item.size > 0)
-        const selectedSpecialties = data.getAll('specialties').map(String).filter(Boolean)
-        const selectedLanguages = data.getAll('languages').map(String).filter(Boolean)
-        if (requestedType === 'healer') {
-          if (!data.get('professionalTitle') || (data.get('professionalTitle') === 'Other' && !String(data.get('professionalTitleOther')||'').trim())) throw new Error('Please enter your professional title.')
-          if (selectedSpecialties.length === 0 && cleanList(data.get('specialtiesOther')).length === 0) throw new Error('Please choose at least one area of expertise.')
-          if (!String(data.get('professionalBiography')||'').trim()) throw new Error('Please enter your professional biography.')
-          if (!String(data.get('education')||'').trim()) throw new Error('Please add at least one education entry.')
-          if (!String(data.get('certifications')||'').trim()) throw new Error('Please add at least one professional certification.')
-          if (healerDocuments.length === 0) throw new Error('Please attach at least one supporting document.')
-          if (!Number(data.get('yearsExperience'))) throw new Error('Please enter your years of experience.')
-          if (selectedLanguages.length === 0 && cleanList(data.get('languagesOther')).length === 0) throw new Error('Please choose at least one language.')
-          if (!String(data.get('country')||'').trim()) throw new Error('Please enter your country.')
-          if (!data.get('sessionAvailability')) throw new Error('Please choose your session availability.')
-          if (data.getAll('sessionTypes').length === 0) throw new Error('Please choose at least one session type.')
-        }
-        const healerApplication = requestedType === 'healer' ? {
-          professional_title: data.get('professionalTitle') === 'Other' ? String(data.get('professionalTitleOther')||'').trim() : String(data.get('professionalTitle')||'').trim(),
-          specialties: [...selectedSpecialties.filter(item=>item!=='Other'), ...cleanList(data.get('specialtiesOther'))],
-          biography: String(data.get('professionalBiography')||'').trim(),
-          education: parseEntries(data.get('education'), ['institution_name','program_or_degree','country','graduation_year']),
-          certifications: parseEntries(data.get('certifications'), ['certificate_name','issuing_organization','issue_date','expiration_date','certificate_number']),
-          document_names: healerDocuments.map(file=>file.name),
-          years_experience: Number(data.get('yearsExperience')||0),
-          languages: [...selectedLanguages.filter(item=>item!=='Other'), ...cleanList(data.get('languagesOther'))],
-          country: String(data.get('country')||'').trim(),
-          city: String(data.get('city')||'').trim(),
-          website: String(data.get('professionalWebsite')||'').trim(),
-          linkedin: String(data.get('linkedinProfile')||'').trim(),
-          professional_license: { license_number:String(data.get('licenseNumber')||'').trim(), licensing_authority:String(data.get('licensingAuthority')||'').trim(), country:String(data.get('licenseCountry')||'').trim() },
-          insurance_accepted: cleanList(data.get('insuranceAccepted')),
-          session_availability: String(data.get('sessionAvailability')||''),
-          session_types: data.getAll('sessionTypes').map(String)
-        } : null
-        const { data:authData, error } = await supabase.auth.signUp({ email, password, options: {
-          emailRedirectTo: BASE_URL,
-          data: { full_name: fullName, profile_type: requestedType, requested_profile_type: requestedType, country: data.get('country'), healer_application: healerApplication }
-        }})
-        if (error) throw error
-        if (requestedType === 'healer' && authData.user && authData.session && healerDocuments.length) {
-          const { data:application } = await supabase.from('healer_applications').select('id').eq('user_id',authData.user.id).single()
-          for (const file of healerDocuments) {
-            const path = `${authData.user.id}/${crypto.randomUUID()}-${safeFileName(file.name)}`
-            const { error:uploadError } = await supabase.storage.from('healer-documents').upload(path,file,{contentType:file.type})
-            if (!uploadError) await supabase.from('healer_application_documents').insert({application_id:application?.id||null,user_id:authData.user.id,storage_path:path,original_name:file.name,mime_type:file.type,file_size:file.size})
-          }
-        }
-        setMessage(requestedType === 'healer' ? 'Your healer account is ready. You can create sessions and podcasts right away. Please check your email to verify your account.' : 'Welcome to Nova Resort. Please check your email to verify your account.')
-      } else if (mode === 'reset') {
+      if (mode === 'reset') {
         const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: BASE_URL })
         if (error) throw error
         setMessage('Password reset instructions have been sent to your email.')
@@ -248,27 +196,24 @@ function AuthScreen() {
     finally { setLoading(false) }
   }
 
-  return <div className="auth-page"><button className="language-toggle auth-language" onClick={()=>switchLanguage(language==='en'?'he':'en')}><Languages/>{language==='en'?'עברית':'English'}</button>
+  return <div className="auth-page"><button className="language-toggle auth-language" onClick={()=>switchLanguage(language==='en'?'he':'en')}><Languages/>{language==='en'?'\u05E2\u05D1\u05E8\u05D9\u05EA':'English'}</button>
     <div className="auth-brand"><Logo/><div className="auth-hero-copy"><span className="auth-kicker"><Sparkles size={13}/> A SAFE SPACE TO BE HUMAN</span><h1>Connection can be<br/><em>part of the healing.</em></h1><p>Talk, listen, and grow in a thoughtful community built around emotional wellbeing and meaningful human connection.</p><div className="auth-values"><span><Heart/>Kind connection</span><span><ShieldCheck/>Safety first</span><span><Leaf/>Space to grow</span></div></div><p className="auth-disclaimer">Nova Resort is a peer-support community and is not a substitute for professional or emergency services.</p></div>
     <div className="auth-panel"><div className="auth-mobile-logo"><Logo/></div><div className="auth-form-wrap"><span className="welcome-icon"><Leaf size={22}/></span>
-      <h2>{mode === 'register' ? 'Create your account' : mode === 'reset' ? 'Reset your password' : 'Welcome to Nova Resort'}</h2>
-      <p>{mode === 'register' ? 'Join a community where you can feel seen and supported.' : mode === 'reset' ? 'We’ll send a secure reset link to your email.' : 'Sign in to return to your community.'}</p>
+      <h2>{mode === 'reset' ? 'Reset your password' : 'Welcome to Nova Resort'}</h2>
+      <p>{mode === 'reset' ? 'We\u2019ll send a secure reset link to your email.' : 'Sign in to return to your community.'}</p>
       {message && <div className="form-message success"><ShieldCheck size={17}/>{message}</div>}{error && <div className="form-message error">{error}</div>}
       <form onSubmit={submit}>
-        {mode === 'register' && <><label>Full name<input name="fullName" required placeholder="Your full name"/></label><div className="form-row"><label>Country<input name="country" required placeholder="Your country"/></label><label>Profile type<select name="profileType" value={profileType} onChange={event=>setProfileType(event.target.value)}><option value="member">Community member</option><option value="healer">Healer / Therapist</option></select></label></div>{profileType==='healer'&&<section className="healer-registration"><h3>Healer Registration</h3><p>Healer accounts can create sessions and podcasts immediately after registration.</p><div className="form-row"><label>Professional Title<select name="professionalTitle" required value={professionalTitle} onChange={event=>setProfessionalTitle(event.target.value)}><option value="">Choose title</option>{professionalTitles.map(title=><option key={title}>{title}</option>)}</select></label>{professionalTitle==='Other'&&<label>Custom title<input name="professionalTitleOther" required placeholder="Your professional title"/></label>}</div><fieldset><legend>Areas of Expertise</legend><div className="option-grid">{specialties.map(item=><label key={item}><input type="checkbox" name="specialties" value={item}/>{item}</label>)}</div><input name="specialtiesOther" placeholder="Other specialties, separated by commas"/></fieldset><label>Professional Biography<textarea name="professionalBiography" required maxLength={2000} placeholder="Who you are, your approach, experience, and how you help people."/></label><label>Education<textarea name="education" required placeholder="One per line: Institution | Program or Degree | Country | Graduation Year"/></label><label>Professional Certifications<textarea name="certifications" required placeholder="One per line: Certificate | Issuing Organization | Issue Date | Expiration Date | Certificate Number"/></label><label>Upload Supporting Documents<input type="file" name="healerDocuments" required multiple accept="application/pdf,image/jpeg,image/png"/></label><div className="form-row"><label>Years of Experience<input type="number" name="yearsExperience" required min={0}/></label><label>City<input name="city" placeholder="Optional"/></label></div><fieldset><legend>Languages Spoken</legend><div className="option-grid compact">{languages.map(item=><label key={item}><input type="checkbox" name="languages" value={item}/>{item}</label>)}</div><input name="languagesOther" placeholder="Other languages, separated by commas"/></fieldset><div className="form-row"><label>Professional Website<input type="url" name="professionalWebsite" placeholder="https://"/></label><label>LinkedIn Profile<input type="url" name="linkedinProfile" placeholder="https://linkedin.com/in/..."/></label></div><div className="form-row"><label>License Number<input name="licenseNumber"/></label><label>Licensing Authority<input name="licensingAuthority"/></label></div><label>License Country<input name="licenseCountry"/></label><label>Insurance Accepted<input name="insuranceAccepted" placeholder="Optional, separated by commas"/></label><fieldset><legend>Online Session Availability</legend><div className="option-grid compact"><label><input type="radio" name="sessionAvailability" value="online" required/>Online Sessions</label><label><input type="radio" name="sessionAvailability" value="in_person"/>In-Person Sessions</label><label><input type="radio" name="sessionAvailability" value="both"/>Both</label></div></fieldset><fieldset><legend>Session Types</legend><div className="option-grid compact">{['Individual','Couples','Family','Group','Workshops','Courses'].map(item=><label key={item}><input type="checkbox" name="sessionTypes" value={item}/>{item}</label>)}</div></fieldset></section>}</>}
         <label>Email address<input type="email" name="email" required placeholder="you@example.com"/></label>
         {mode !== 'reset' && <label>Password<input type="password" name="password" required minLength={8} placeholder="At least 8 characters"/></label>}
-        {mode === 'register' && <><label>Confirm password<input type="password" name="confirmPassword" required minLength={8} placeholder="Repeat your password"/></label><label className="check-label"><input type="checkbox" name="guidelines"/>I agree to the Community Guidelines and Privacy Policy.</label></>}
         {mode === 'login' && <button type="button" className="forgot" onClick={() => {setMode('reset');setError('');setMessage('')}}>Forgot password?</button>}
-        <button className="auth-submit" disabled={loading}>{loading ? 'Please wait…' : mode === 'register' ? 'Create account' : mode === 'reset' ? 'Send reset link' : 'Sign in'}<ChevronRight size={17}/></button>
+        <button className="auth-submit" disabled={loading}>{loading ? 'Please wait\u2026' : mode === 'reset' ? 'Send reset link' : 'Sign in'}<ChevronRight size={17}/></button>
       </form>
-      <div className="auth-switch">{mode === 'login' ? <>New to Nova Resort? <button onClick={() => setMode('register')}>Create an account</button></> : <>Already have an account? <button onClick={() => setMode('login')}>Sign in</button></>}</div>
+      <div className="auth-switch">{mode === 'login' ? <>New to Nova Resort? <button onClick={() => setRoute('register')}>Create an account</button></> : <>Already have an account? <button onClick={() => setMode('login')}>Sign in</button></>}</div>
     </div>
     <footer className="auth-footer">&copy; 2026 Nova Resort. Created and designed by Shir Kanevsky. All rights reserved.</footer>
   </div>
   </div>
 }
-
 function ProfilePreviewActions({profile,friendships,userId,onConnect,onMessage,onSessions,onCreatePodcast,onCreateSession}:{profile:LiveProfile;friendships:Friendship[];userId:string;onConnect:(p:LiveProfile)=>void;onMessage:(p:LiveProfile)=>void;onSessions:()=>void;onCreatePodcast?:()=>void;onCreateSession?:()=>void}) {
   const rel = relationshipFor(profile.id, friendships)
   const label = rel?.status==='accepted' ? 'Connected' : rel?.status==='pending' && rel.requester_id===userId ? 'Request sent' : rel?.status==='pending' ? 'Accept request' : 'Connect'
@@ -313,7 +258,7 @@ function App() {
   const [podcastPlayer,setPodcastPlayer] = useState<PlayerEpisode|null>(null)
   const [signingOut,setSigningOut] = useState(false)
   const [metrics,setMetrics] = useState({members:0,online:0,healers:0,rooms:0,sessions:0,notifications:0,connections:0})
-  const { canCreateContent } = useUserRole(session?.user?.id ?? null)
+  const { canCreateContent, profile: userProfile, isLoading: roleLoading } = useUserRole(session?.user?.id ?? null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setAuthLoading(false) })
@@ -449,7 +394,7 @@ function App() {
       await supabase.removeAllChannels()
       const { error } = await supabase.auth.signOut()
       if (error) throw error
-      setRoute('home')
+      setRoute('login')
     } catch {
       act('We could not sign you out. Please try again.')
       setSigningOut(false)
@@ -476,7 +421,16 @@ function App() {
   }
 
   if (authLoading) return <div className="auth-loader"><Logo/><span/></div>
-  if (!session) return <AuthScreen/>
+  if (route.authView === 'callback') return <AuthCallbackHandler/>
+  if (!session) {
+    if (route.authView === 'check-email') return <CheckEmail/>
+    if (route.authView === 'register') return <RegistrationChooser/>
+    if (route.authView === 'register-member') return <MemberRegistration/>
+    if (route.authView === 'register-healer') return <HealerRegistration/>
+    return <AuthScreen/>
+  }
+  if (!roleLoading && userProfile && userProfile.account_status === 'email_pending') return <CheckEmail email={session.user.email}/>
+  if (roleLoading) return <div className="auth-loader"><Logo/><span/></div>
   const name = session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Member'
   const initials = name.split(' ').map((part: string) => part[0]).join('').slice(0,2).toUpperCase()
 
