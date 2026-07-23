@@ -68,6 +68,7 @@ export function HealerDashboard({userId,onOpenSession,onCreateSession,onClose}:{
   const [loading,setLoading]=useState(true)
   const [error,setError]=useState('')
   const [activeTab,setActiveTab]=useState<'overview'|'sessions'|'connections'|'podcasts'|'activity'>('overview')
+  const [sessionTab,setSessionTab]=useState<'upcoming'|'active'|'past'>('upcoming')
 
   const load=useCallback(async()=>{
     setLoading(true);setError('')
@@ -361,9 +362,9 @@ export function HealerDashboard({userId,onOpenSession,onCreateSession,onClose}:{
         <button className="hd-btn hd-btn-primary" onClick={onCreateSession}><Plus size={14}/> Create Session</button>
       </div>
       <div className="hd-session-tabs">{(['upcoming','active','past'] as const).map(t=>
-        <button key={t} className={t==='upcoming'?'active':''}>{t[0].toUpperCase()+t.slice(1)} ({t==='upcoming'?upcoming.length:t==='active'?active.length:past.length})</button>
+        <button key={t} className={sessionTab===t?'active':''} onClick={()=>setSessionTab(t)}>{t[0].toUpperCase()+t.slice(1)} ({t==='upcoming'?upcoming.length:t==='active'?active.length:past.length})</button>
       )}</div>
-      <div className="hd-session-list">{upcoming.map(s=>{
+      <div className="hd-session-list">{(sessionTab==='upcoming'?upcoming:sessionTab==='active'?active:past).map(s=>{
         const regCount=s.session_registrations?.filter(r=>r.status==='registered'||r.status==='attended').length||0
         return <article key={s.id} className="hd-session">
           <div className="hd-session-time"><span className="hd-session-day">{fmtDate(s.starts_at)}</span><span className="hd-session-clock">{fmtTime(s.starts_at)}</span></div>

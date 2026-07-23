@@ -451,6 +451,26 @@
   color:#e67e22;
 }
 
+.session-actions .waitlisted-btn {
+  border-color:#f57f17;
+  color:#f57f17;
+  background:#fff8e1;
+}
+
+.session-actions .reg-closed {
+  opacity:.6;
+  cursor:not-allowed;
+  font-size:8px;
+}
+
+.waitlist-badge {
+  background:#f57f17 !important;
+  color:#fff !important;
+  border-color:#f57f17 !important;
+  font-size:8px !important;
+  padding:4px 8px !important;
+}
+
 .session-actions button:disabled {
   opacity:.65;
 }
@@ -592,6 +612,45 @@
   padding:14px;
   background:var(--page);
   border-radius:14px;
+}
+
+.detail-actions-row {
+  display:flex;
+  gap:8px;
+}
+
+.detail-action-btn {
+  flex:1;
+  height:38px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:var(--card);
+  color:var(--deep);
+  font-size:10px;
+  font-weight:700;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  cursor:pointer;
+  transition:border-color .15s;
+}
+
+.detail-action-btn:hover {
+  border-color:var(--green);
+}
+
+.join-session-btn.waitlisted {
+  background:transparent;
+  border:1px solid #f57f17;
+  color:#f57f17;
+}
+
+.join-session-btn:disabled {
+  opacity:.6;
+  cursor:not-allowed;
+  background:var(--page);
+  color:var(--muted);
 }
 
 .detail-countdown {
