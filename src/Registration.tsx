@@ -1,7 +1,7 @@
-import { FormEvent, useCallback, useEffect, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import {
   Leaf, Sparkles, ShieldCheck, ChevronRight, ChevronLeft, Mail, User, Briefcase,
-  Heart, Globe, Clock, Languages, CheckCircle2, Loader2, AlertTriangle, ExternalLink
+  Heart, Languages, CheckCircle2, Loader2, AlertTriangle
 } from 'lucide-react'
 import { supabase } from './supabase'
 

@@ -1,8 +1,8 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import {
-  BadgeCheck, Bookmark, ChevronLeft, ChevronRight, Clock, Edit3, Eye, EyeOff,
+  BadgeCheck, Bookmark, ChevronLeft, ChevronRight, Edit3, Eye, EyeOff,
   FileAudio, Headphones, Heart, List, Mic, Pause, Play, Plus, Radio, Search,
-  Send, Share2, ShieldAlert, SkipBack, SkipForward, Square, Tag, Trash2, Upload,
+  Send, Share2, ShieldAlert, SkipBack, SkipForward, Square, Trash2, Upload,
   Video, Volume2, X
 } from 'lucide-react'
 import { supabase } from './supabase'
@@ -13,7 +13,7 @@ type Podcast = {
   category: string; language: string; creator_id: string; creator_name: string; creator_avatar_url: string | null;
   professional_title: string | null; verified: boolean; follower_count: number; episode_count: number; total_plays: number;
   latest_episode_id: string | null; latest_episode_title: string | null; latest_episode_published_at: string | null;
-  tags: string[]; popularity_score: number; total_count: number; status?: string; visibility?: string
+  tags: string[]; popularity_score: number; total_count: number; status?: string; visibility?: string; cover_path?: string
 }
 type Episode = {
   id: string; podcast_id: string; title: string; description: string; episode_number: number; season_number: number | null;
@@ -465,7 +465,7 @@ function PodcastStudio({ userId, initialAction = 'list', initialPodcastId, initi
     const form = new FormData(event.currentTarget)
     const title = String(form.get('title') || '')
     const coverFile = form.get('cover_image') as File | null
-    let cover_url = selectedPodcast.cover_image_url, cover_path = (selectedPodcast as any).cover_path || null
+    let cover_url = selectedPodcast.cover_image_url, cover_path = selectedPodcast.cover_path || null
     if (coverFile && coverFile.size > 0) {
       const result = await uploadCoverImage(coverFile)
       if (result) { cover_url = result.url; cover_path = result.path }
@@ -502,73 +502,6 @@ function PodcastStudio({ userId, initialAction = 'list', initialPodcastId, initi
     if (error) { showMsg(error.message); return }
     showMsg('Podcast archived.')
     loadPodcasts()
-  }
-
-  async function createEpisode(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!selectedPodcast) return
-    const form = new FormData(event.currentTarget)
-    const title = String(form.get('title') || '')
-    const audioFile = form.get('audio_file') as File | null
-    const videoFile = form.get('video_file') as File | null
-    const isVideo = Boolean(videoFile && videoFile.size > 0)
-    let audio_path: string | null = null, audio_url: string | null = null, audio_duration = 0
-    let video_path: string | null = null, video_url: string | null = null, media_kind = 'audio'
-    let media_mime_type: string | null = null, media_size_bytes: number | null = null
-    if (isVideo) {
-      const videoResult = await uploadVideoFile(videoFile!)
-      if (!videoResult) return
-      video_path = videoResult.path; video_url = videoResult.url; audio_duration = videoResult.duration
-      media_kind = 'video'; media_mime_type = videoFile!.type; media_size_bytes = videoFile!.size
-    } else if (audioFile && audioFile.size > 0) {
-      const audioResult = await uploadAudioFile(audioFile)
-      if (!audioResult) return
-      audio_path = audioResult.path; audio_url = audioResult.url; audio_duration = audioResult.duration
-      media_mime_type = audioFile.type; media_size_bytes = audioFile.size
-    }
-    const coverFile = form.get('cover_image') as File | null
-    let cover_url: string | null = null, cover_path: string | null = null
-    if (coverFile && coverFile.size > 0) {
-      const result = await uploadCoverImage(coverFile)
-      if (result) { cover_url = result.url; cover_path = result.path }
-    }
-    const tagsRaw = String(form.get('tags') || '').split(',').map(t => t.trim()).filter(Boolean)
-    const { error } = await supabase.from('podcast_episodes').insert({
-      podcast_id: selectedPodcast.id, creator_id: userId, title,
-      description: String(form.get('description') || ''),
-      show_notes: String(form.get('show_notes') || ''),
-      season_number: form.get('season_number') ? Number(form.get('season_number')) : null,
-      episode_number: Number(form.get('episode_number') || 1),
-      audio_path, audio_url, audio_duration_seconds: audio_duration,
-      video_path, video_url, media_kind, media_mime_type, media_size_bytes,
-      cover_image_url: cover_url, cover_path,
-      transcript: String(form.get('transcript') || '') || null,
-      content_warning: String(form.get('content_warning') || '') || null,
-      explicit_content: Boolean(form.get('explicit_content')),
-      visibility: String(form.get('visibility') || 'public'),
-      comments_enabled: Boolean(form.get('comments_enabled') ?? true),
-      reactions_enabled: Boolean(form.get('reactions_enabled') ?? true),
-      status: 'draft'
-    })
-    if (error) { showMsg(error.message); return }
-    if (tagsRaw.length > 0) {
-      const { data: episode } = await supabase.from('podcast_episodes').select('id').eq('podcast_id', selectedPodcast.id).eq('creator_id', userId).order('created_at', { ascending: false }).limit(1).single()
-      if (episode) {
-        for (const tagName of tagsRaw) {
-          const slug = tagName.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-')
-          const { data: existingTag } = await supabase.from('podcast_tags').select('id').eq('slug', slug).single()
-          let tagId = existingTag?.id
-          if (!tagId) {
-            const { data: newTag } = await supabase.from('podcast_tags').insert({ name: tagName, slug }).select('id').single()
-            tagId = newTag?.id
-          }
-          if (tagId) await supabase.from('podcast_tag_links').upsert({ tag_id: tagId, episode_id: episode.id })
-        }
-      }
-    }
-    showMsg('Episode draft created.')
-    loadEpisodes(selectedPodcast.id)
-    navigateStudio('episodes', selectedPodcast)
   }
 
   async function togglePublishEpisode(ep: StudioEpisode) {
@@ -737,6 +670,7 @@ function EpisodeCreateForm({ podcast, userId, uploadAudioFile, uploadVideoFile, 
   const streamRef = useRef<MediaStream | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const videoPreviewRef = useRef<HTMLVideoElement | null>(null)
+  const formRef = useRef<HTMLFormElement | null>(null)
 
   useEffect(() => {
     return () => {
@@ -945,7 +879,7 @@ function EpisodeCreateForm({ podcast, userId, uploadAudioFile, uploadVideoFile, 
       <button type="button" className="cancel" onClick={() => { setSelectedFile(null); setSelectedFileType(null) }}><X size={14} /> Remove</button>
     </div>}
 
-    <form onSubmit={(e) => handleSubmit(e, 'draft')} className="podcast-form">
+    <form ref={formRef} onSubmit={(e) => handleSubmit(e, 'draft')} className="podcast-form">
       <label>Title<input name="title" required minLength={3} maxLength={160} placeholder="Episode title" /></label>
       <div className="form-row">
         <label>Season number<input name="season_number" type="number" min="1" placeholder="Optional" /></label>
@@ -969,7 +903,7 @@ function EpisodeCreateForm({ podcast, userId, uploadAudioFile, uploadVideoFile, 
       </div>
       <div className="episode-submit-row">
         <button type="submit"><Upload size={14} /> Save as draft</button>
-        <button type="button" className="publish-btn" onClick={(e) => handleSubmit(e as any, 'published')}><Send size={14} /> Publish now</button>
+        <button type="button" className="publish-btn" onClick={() => { if (formRef.current) handleSubmit({ preventDefault: () => {}, currentTarget: formRef.current } as any, 'published') }}><Send size={14} /> Publish now</button>
       </div>
     </form>
   </>
