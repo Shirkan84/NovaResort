@@ -69,7 +69,7 @@ function routeFromHash(): AppRoute {
   const urlParams = new URLSearchParams(window.location.search)
   if (urlParams.get('code')) return { feature: null, roomId: null, profileId: null, podcastId: null, episodeId: null, podcastStudio: false, studioAction: null, studioPodcastId: null, studioEpisodeId: null, sessionId: null, sessionView: null, authView: 'callback', notFound: false, categorySlug: null }
   const pathRoute = window.location.pathname
-    .replace(new RegExp('^' + BASE_PATH.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '/?'), '')
+    .replace(new RegExp('^' + BASE_PATH.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&') + '/?'), '')
     .replace(/^\/+|\/+$/g, '')
   const value = decodeURIComponent(window.location.hash.replace(/^#\/?/, '') || pathRoute || 'home')
   const base = { feature: null, roomId: null, profileId: null, podcastId: null, episodeId: null, podcastStudio: false, studioAction: null as string | null, studioPodcastId: null as string | null, studioEpisodeId: null as string | null, sessionId: null as string | null, sessionView: null as string | null, authView: null as AuthView, notFound: false, categorySlug: null as string | null }
@@ -306,7 +306,7 @@ function App() {
   const [showGlobalSearch,setShowGlobalSearch] = useState(false)
   const [signingOut,setSigningOut] = useState(false)
   const [metrics,setMetrics] = useState({members:0,online:0,healers:0,rooms:0,sessions:0,notifications:0,connections:0})
-  const { canCreateContent, profile: userProfile, isLoading: roleLoading } = useUserRole(session?.user?.id ?? null)
+  const { canCreateContent, isAdmin, profile: userProfile, isLoading: roleLoading } = useUserRole(session?.user?.id ?? null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setAuthLoading(false) })
@@ -355,6 +355,7 @@ function App() {
   }, [route])
   useEffect(() => applyLanguage(language), [language])
   useEffect(() => { localStorage.setItem('nova-theme', dark ? 'dark' : 'light') }, [dark])
+  useEffect(() => { if (!roleLoading && feature === 'feedback-admin' && !isAdmin) setRoute('home') }, [feature, isAdmin, roleLoading])
   useEffect(() => { return () => { if (noticeTimer.current) window.clearTimeout(noticeTimer.current) } }, [])
   useEffect(() => {
     function handleKey(e:KeyboardEvent){

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Bug, Clock3, Eye, Filter, Lightbulb, Loader2, MessageCircleQuestion, Send, Star, X, ChevronRight, Flag, ExternalLink } from 'lucide-react'
 import { supabase } from './supabase'
+import { useUserRole } from './hooks/useUserRole'
 
 type FeedbackReport = {
   id: string
@@ -38,6 +39,9 @@ function fmtTime(iso: string) {
 }
 
 export function FeedbackAdmin({ onClose }: { onClose: () => void }) {
+  const [userId, setUserId] = useState<string | null>(null)
+  useEffect(() => { supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null)) }, [])
+  const { isAdmin, isLoading: roleLoading } = useUserRole(userId)
   const [items, setItems] = useState<FeedbackReport[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -69,6 +73,23 @@ export function FeedbackAdmin({ onClose }: { onClose: () => void }) {
 
   const filtered = filter === 'all' ? items : items.filter(i => i.status === filter)
   const counts = STATUS_OPTIONS.reduce((acc, s) => { acc[s] = items.filter(i => i.status === s).length; return acc }, {} as Record<string, number>)
+
+  if (!roleLoading && !isAdmin) {
+    return (
+      <div className="feature-overlay" role="dialog" aria-modal="true" aria-label="Access denied">
+        <section className="feedback-admin">
+          <header>
+            <div><h2>Access Denied</h2><p>You do not have permission to view this page.</p></div>
+            <button aria-label="Close" onClick={onClose}><X /></button>
+          </header>
+          <div className="empty-state" style={{ padding: '40px 20px', textAlign: 'center' }}>
+            <p>This page is restricted to administrators.</p>
+            <button className="nr-btn nr-btn-primary" onClick={onClose} style={{ marginTop: 12 }}>Go back</button>
+          </div>
+        </section>
+      </div>
+    )
+  }
 
   return (
     <div className="feature-overlay">

@@ -46,7 +46,7 @@ function getRoute() {
   const fromHash = window.location.hash.replace(/^#\/?/, '')
   if (fromHash) return decodeURIComponent(fromHash)
   const pathRoute = window.location.pathname
-    .replace(new RegExp('^' + BASE_PATH.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '/?'), '')
+    .replace(new RegExp('^' + BASE_PATH.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&') + '/?'), '')
     .replace(/^\/+|\/+$/g, '')
   return decodeURIComponent(pathRoute || 'home')
 }
