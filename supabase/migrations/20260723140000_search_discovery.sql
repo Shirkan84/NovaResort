@@ -144,7 +144,7 @@ as $$
       s.category || ' · ' || to_char(s.starts_at, 'Mon DD, YYYY HH12:MI AM') as subtitle,
       left(s.description, 120) as description,
       s.cover_image_url as image_url,
-      case when s.session_room_state is not null and (select rs.status from public.session_room_state rs where rs.session_id = s.id) = 'live'
+      case when exists (select 1 from public.session_room_state rs where rs.session_id = s.id and rs.status = 'live')
         then 'LIVE' else s.status end as badge,
       (case
         when s.title ilike '%' || (select safe_text from sanitized) || '%' then 3

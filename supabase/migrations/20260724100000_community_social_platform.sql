@@ -26,8 +26,7 @@ DECLARE
 BEGIN
   SELECT COALESCE(jsonb_agg(fed), '[]'::jsonb) INTO v_result
   FROM (
-    -- Sessions from followed healers
-    SELECT jsonb_build_object(
+    (SELECT jsonb_build_object(
       'type', 'session',
       'id', s.id,
       'title', s.title,
@@ -49,12 +48,11 @@ BEGIN
       AND s.visibility = 'public'
       AND s.created_at > now() - interval '30 days'
     ORDER BY s.created_at DESC
-    LIMIT 10
+    LIMIT 10)
 
     UNION ALL
 
-    -- Podcast episodes from followed podcasts
-    SELECT jsonb_build_object(
+    (SELECT jsonb_build_object(
       'type', 'episode',
       'id', pe.id,
       'podcast_id', pe.podcast_id,
@@ -73,12 +71,11 @@ BEGIN
     WHERE pe.status = 'published'
       AND pe.created_at > now() - interval '30 days'
     ORDER BY pe.created_at DESC
-    LIMIT 10
+    LIMIT 10)
 
     UNION ALL
 
-    -- New healers (visible to everyone)
-    SELECT jsonb_build_object(
+    (SELECT jsonb_build_object(
       'type', 'healer',
       'id', p.id,
       'title', p.full_name,
@@ -96,7 +93,7 @@ BEGIN
       AND p.visibility != 'private'
       AND p.created_at > now() - interval '30 days'
     ORDER BY p.created_at DESC
-    LIMIT 10
+    LIMIT 10)
 
     ORDER BY sort_date DESC
     LIMIT p_limit OFFSET p_offset
@@ -191,6 +188,17 @@ $$;
 -- 3. PODCAST COMMENTS: edit + delete
 -- ============================================================
 
+-- Add edited_at column if not exists
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'podcast_comments' AND column_name = 'edited_at'
+  ) THEN
+    ALTER TABLE podcast_comments ADD COLUMN edited_at timestamptz;
+  END IF;
+END $$;
+
 -- Edit own comment
 CREATE OR REPLACE FUNCTION public.edit_podcast_comment(
   p_comment_id uuid,
@@ -216,17 +224,6 @@ AS $$
   DELETE FROM podcast_comments
   WHERE id = p_comment_id AND user_id = auth.uid();
 $$;
-
--- Add edited_at column if not exists
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'podcast_comments' AND column_name = 'edited_at'
-  ) THEN
-    ALTER TABLE podcast_comments ADD COLUMN edited_at timestamptz;
-  END IF;
-END $$;
 
 -- ============================================================
 -- 4. PROFILE REPORTS

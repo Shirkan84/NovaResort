@@ -204,7 +204,7 @@ GRANT EXECUTE ON FUNCTION public.get_continue_listening(integer) TO authenticate
 -- 6. GET SAVED SESSIONS
 -- =============================================
 
-CREATE OR REPLACE FUNCTION public_get_saved_sessions(
+CREATE OR REPLACE FUNCTION public.get_saved_sessions(
   page_limit integer DEFAULT 20,
   page_offset integer DEFAULT 0
 )
@@ -249,7 +249,7 @@ AS $$
   LEFT JOIN public.profiles p ON p.id = s.host_id;
 $$;
 
-GRANT EXECUTE ON FUNCTION public_get_saved_sessions(integer, integer) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_saved_sessions(integer, integer) TO authenticated;
 
 -- 7. GET MEMBER DASHBOARD STATS
 -- =============================================
@@ -264,12 +264,14 @@ RETURNS TABLE (
   connections_count bigint,
   healers_followed bigint
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  DECLARE v_user uuid := coalesce(target_user, auth.uid());
+DECLARE v_user uuid := coalesce(target_user, auth.uid());
+BEGIN
+  RETURN QUERY
   SELECT
     (SELECT COUNT(*)::bigint FROM public.session_registrations WHERE user_id = v_user AND status IN ('registered','attended')),
     (SELECT COUNT(*)::bigint FROM public.session_registrations sr JOIN public.sessions s ON s.id = sr.session_id WHERE sr.user_id = v_user AND s.status = 'completed'),
@@ -278,6 +280,7 @@ AS $$
     (SELECT COUNT(*)::bigint FROM public.podcast_episode_saves WHERE user_id = v_user),
     (SELECT COUNT(*)::bigint FROM public.friendships WHERE status = 'accepted' AND (requester_id = v_user OR addressee_id = v_user)),
     (SELECT COUNT(*)::bigint FROM public.healer_followers WHERE follower_id = v_user);
+END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.get_member_stats(uuid) TO authenticated;
@@ -307,7 +310,7 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
   WITH member_interests AS (
-    SELECT interests FROM public.profiles WHERE id = auth.uid()
+    SELECT interests, languages FROM public.profiles WHERE id = auth.uid()
   ),
   followed_categories AS (
     SELECT DISTINCT p.category
@@ -317,10 +320,14 @@ AS $$
   ),
   scored AS (
     SELECT
-      p.*,
+      p.id, p.title, p.short_description, p.cover_image_url,
+      p.category, p.language, p.creator_id,
       pr.full_name as creator_full_name,
       pr.display_name as creator_display_name,
       pr.avatar_url as creator_avatar_url,
+      (SELECT COUNT(*)::bigint FROM public.podcast_follows pf2 WHERE pf2.podcast_id = p.id) as follower_count,
+      (SELECT COUNT(*)::bigint FROM public.podcast_episodes pe WHERE pe.podcast_id = p.id AND pe.status = 'published') as episode_count,
+      0::bigint as total_plays,
       CASE
         WHEN p.category IN (SELECT category FROM followed_categories) THEN 3
         WHEN p.category = ANY(SELECT unnest(interests) FROM member_interests) THEN 2
@@ -388,7 +395,7 @@ AS $$
   JOIN public.profiles p ON p.id = sv.healer_id;
 $$;
 
-GRANT EXECUTE ON FUNCTION public_get_saved_healers_list(integer, integer) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_saved_healers_list(integer, integer) TO authenticated;
 
 -- 10. GET FOLLOWED HEALERS LIST
 -- =============================================
@@ -432,4 +439,4 @@ AS $$
   JOIN public.profiles p ON p.id = f.healer_id;
 $$;
 
-GRANT EXECUTE ON FUNCTION public_get_followed_healers_list(integer, integer) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_followed_healers_list(integer, integer) TO authenticated;
