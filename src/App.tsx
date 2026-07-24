@@ -312,11 +312,13 @@ function App() {
   useEffect(() => {
     function handleKey(e:KeyboardEvent){
       if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();setShowGlobalSearch(s=>!s)}
-      if(e.key==='Escape'&&showGlobalSearch)setShowGlobalSearch(false)
+      if(e.key==='Escape'&&showGlobalSearch){setShowGlobalSearch(false);return}
+      if(e.key==='Escape'&&menuOpen){setMenuOpen(false);return}
+      if(e.key==='Escape'&&!showGlobalSearch&&!menuOpen&&feature){e.preventDefault();setRoute('home')}
     }
     window.addEventListener('keydown',handleKey)
     return()=>window.removeEventListener('keydown',handleKey)
-  },[showGlobalSearch])
+  },[showGlobalSearch,menuOpen,feature])
   useEffect(() => {
     if (!session) return
     let cancelled = false
@@ -477,13 +479,14 @@ function App() {
   const name = session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Member'
   const initials = name.split(' ').map((part: string) => part[0]).join('').slice(0,2).toUpperCase()
 
-  return <div className={dark ? 'app dark' : 'app'}>
-    <aside className={menuOpen ? 'sidebar open' : 'sidebar'}>
-      <div className="side-top"><Logo/><button className="icon-btn close-mobile" onClick={() => setMenuOpen(false)}><X size={20}/></button></div>
+  return <div className={dark ? 'app dark' : 'app'} dir={language === 'he' ? 'rtl' : 'ltr'}>
+    <a href="#main-content" className="skip-link">Skip to main content</a>
+    <aside className={menuOpen ? 'sidebar open' : 'sidebar'} role="navigation" aria-label="Main navigation">
+      <div className="side-top"><Logo/><button className="icon-btn close-mobile" aria-label="Close menu" onClick={() => setMenuOpen(false)}><X size={20}/></button></div>
       <nav>
         {[
           [Home, 'Home'], [Compass, 'Discover'], [UsersRound, 'Community'], [Sun, 'Healers'], [Headphones, 'Podcasts'], [Heart, 'Connections'], [MessageCircleMore, 'Messages'], [CalendarDays, 'Sessions']
-        ].map(([Icon, label]) => <button key={label as string} className={activeNav === label ? 'nav-item active' : 'nav-item'} onClick={() => {setMenuOpen(false);setRoute(label==='Community'?'community':label==='Discover'?'discover':label==='Healers'?'healers':label==='Podcasts'?'podcasts':label==='Connections'?'connections':label==='Messages'?'messages':label==='Sessions'?'sessions':'home')}}><Icon size={19}/><span>{label as string}</span>{label === 'Connections' && metrics.connections > 0 && <i>{metrics.connections}</i>}</button>)}
+        ].map(([Icon, label]) => <button key={label as string} className={activeNav === label ? 'nav-item active' : 'nav-item'} aria-current={activeNav === label ? 'page' : undefined} onClick={() => {setMenuOpen(false);setRoute(label==='Community'?'community':label==='Discover'?'discover':label==='Healers'?'healers':label==='Podcasts'?'podcasts':label==='Connections'?'connections':label==='Messages'?'messages':label==='Sessions'?'sessions':'home')}}><Icon size={19}/><span>{label as string}</span>{label === 'Connections' && metrics.connections > 0 && <i>{metrics.connections}</i>}</button>)}
         {canCreateContent && <button className={activeNav === 'Healer Dashboard' ? 'nav-item active' : 'nav-item'} onClick={() => {setMenuOpen(false);setRoute('healer')}}><ShieldCheck size={19}/><span>Healer Dashboard</span></button>}
       </nav>
       <div className="side-card">
@@ -494,14 +497,14 @@ function App() {
       </div>
       <div className="side-bottom">
         <button className="nav-item" onClick={() => openFeature('profile')}><Settings size={19}/><span>Settings</span></button>
-        <button className="profile-mini" onClick={() => openFeature('profile')}><div className="avatar user">{currentAvatar?<img src={currentAvatar} alt=""/>:initials}</div><div><b>{name}</b><span>Community member</span></div><MoreHorizontal size={18}/></button>
+        <button className="profile-mini" onClick={() => openFeature('profile')}><div className="avatar user">{currentAvatar?<img src={currentAvatar} alt={`${name} avatar`} loading="lazy" />:initials}</div><div><b>{name}</b><span>Community member</span></div><MoreHorizontal size={18}/></button>
         <button className="signout" disabled={signingOut} onClick={signOut}>{signingOut?'Signing out...':'Sign out'}</button>
       </div>
     </aside>
 
-    <main>
-      <header>
-        <button className="icon-btn menu-btn" onClick={() => setMenuOpen(true)}><Menu size={22}/></button>
+    <main id="main-content" role="main" aria-label="Main content">
+      <header role="banner">
+        <button className="icon-btn menu-btn" aria-label="Open menu" onClick={() => setMenuOpen(true)}><Menu size={22}/></button>
         <div className="mobile-logo"><Logo/></div>
         <div className="search" onClick={()=>setShowGlobalSearch(true)}><Search size={18}/><input aria-label="Search" readOnly placeholder="Search people, sessions, podcasts..."/><span>⌘ K</span></div>
         <div className="header-actions">
@@ -509,7 +512,7 @@ function App() {
           <button className="icon-btn" aria-label="Toggle theme" onClick={() => setDark(!dark)}>{dark ? <Sun size={19}/> : <Moon size={19}/>}</button>
           <button className="icon-btn notification" aria-label="Notifications" onClick={() => openFeature('notifications')}><Bell size={20}/>{metrics.notifications>0&&<i>{metrics.notifications}</i>}</button>
           <button className="icon-btn" aria-label="Activity Feed" onClick={() => openFeature('community-feed')}><Sparkles size={19}/></button>
-          <button className="user-chip" onClick={()=>openFeature('profile')}><div className="avatar user">{currentAvatar?<img src={currentAvatar} alt=""/>:initials}</div><ChevronDown size={15}/></button>
+          <button className="user-chip" onClick={()=>openFeature('profile')}><div className="avatar user">{currentAvatar?<img src={currentAvatar} alt={`${name} avatar`} loading="lazy" />:initials}</div><ChevronDown size={15}/></button>
           <button className="header-signout" disabled={signingOut} onClick={signOut}>{signingOut?'Signing out...':'Sign out'}</button>
         </div>
       </header>
@@ -530,8 +533,8 @@ function App() {
         ) : (
         <Homepage userId={session.user.id} name={name} canCreateContent={canCreateContent} liveHealers={liveHealers} healersLoading={healersLoading} healersError={healersError} recentMessages={recentMessages} friendships={friendships} dbRooms={dbRooms} showAllRooms={showAllRooms} onToggleRooms={() => setShowAllRooms(!showAllRooms)} onOpenFeature={(f) => openFeature(f as Feature)} onOpenRoom={openRoom} onOpenProfile={openProfile} onOpenHealers={openHealers} onOpenPodcast={openPodcast} onPlayEpisode={setPodcastPlayer} onConnect={connectWith} onMessage={startPrivateMessage} onNotice={act} />
         )}
-        <footer className="app-footer">
-          <div className="footer-about"><b>nova resort</b><p>A safe space to connect, reflect, and grow. Nova Resort is a peer-support community and wellness platform.</p><div className="footer-social"><a href="#" aria-label="Email">✉</a><a href="#" aria-label="Community">♡</a></div></div>
+        <footer className="app-footer" role="contentinfo">
+          <div className="footer-about"><b>nova resort</b><p>A safe space to connect, reflect, and grow. Nova Resort is a peer-support community and wellness platform.</p><div className="footer-social"><button className="icon-btn" aria-label="Email us" onClick={()=>openFeature('feedback')}>✉</button><button className="icon-btn" aria-label="Community feed" onClick={()=>openFeature('community-feed')}>♡</button></div></div>
           <div className="footer-col"><h4>Explore</h4><ul><li><button onClick={() => openFeature('explore')}>Explore</button></li><li><button onClick={() => openFeature('discover')}>Discover People</button></li><li><button onClick={openHealers}>Healers</button></li><li><button onClick={() => openFeature('sessions')}>Sessions</button></li><li><button onClick={() => openPodcast()}>Podcasts</button></li><li><button onClick={() => openFeature('people')}>Community Rooms</button></li></ul></div>
           <div className="footer-col"><h4>Account</h4><ul><li><button onClick={() => openFeature('profile')}>My Profile</button></li><li><button onClick={() => openFeature('connections')}>Connections</button></li><li><button onClick={() => openFeature('messages')}>Messages</button></li><li><button onClick={() => openFeature('notifications')}>Notifications</button></li>{canCreateContent && <li><button onClick={() => openFeature('healer')}>Healer Dashboard</button></li>}</ul></div>
           <div className="footer-col"><h4>Support</h4><ul><li><button onClick={() => openFeature('safety')}>Safety Center</button></li><li><button onClick={() => openFeature('feedback')}>Send Feedback</button></li><li><button onClick={() => openFeature('safety')}>Community Guidelines</button></li><li><button onClick={() => openFeature('safety')}>Privacy Policy</button></li><li><button onClick={() => openFeature('safety')}>Terms of Service</button></li></ul></div>
@@ -581,14 +584,14 @@ function App() {
       />
     )}
     {profilePreview && profilePreview.profile_type !== 'healer' && (
-      <div className="feature-overlay" onClick={(e) => e.target === e.currentTarget && closeOverlay()}>
+      <div className="feature-overlay" role="dialog" aria-modal="true" aria-label="Member profile" onClick={(e) => e.target === e.currentTarget && closeOverlay()}>
         <section className="profile-window public-profile-window">
           <header>
             <div>
               <h2>{profileName(profilePreview)}</h2>
               <p>{roleLabel(profilePreview)}{profilePreview.country ? ` · ${profilePreview.country}` : ''}</p>
             </div>
-            <button onClick={closeOverlay}><X /></button>
+            <button aria-label="Close profile" onClick={closeOverlay}><X /></button>
           </header>
           <div className="public-profile-body">
             <span className="avatar healer rose public-profile-avatar">
@@ -606,7 +609,7 @@ function App() {
     )}
     {profilePreview && <div className="profile-podcast-sidecar"><ProfilePodcastSection profileId={profilePreview.id} onOpenPodcast={openPodcast}/></div>}
     <PodcastMiniPlayer episode={podcastPlayer} onClose={() => setPodcastPlayer(null)}/>
-    {notice && <div className="toast"><ShieldCheck size={17}/>{notice}</div>}
+    {notice && <div className="toast" role="status" aria-live="polite"><ShieldCheck size={17}/>{notice}</div>}
   </div>
 }
 

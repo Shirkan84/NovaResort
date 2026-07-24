@@ -178,7 +178,7 @@ export function WellnessJourney({ userId, onClose, onOpenFeature }: {
 
   return (
     <div className="feature-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="wj-window">
+      <div className="wj-window" role="dialog" aria-modal="true" aria-label="Wellness journey">
         {/* New Achievement Toast */}
         {newAchievements.length > 0 && (
           <div className="wj-achievement-toast">
@@ -382,7 +382,7 @@ export function WellnessJourney({ userId, onClose, onOpenFeature }: {
                     if (catAchievements.length === 0) return null
                     return (
                       <div key={cat} className="wj-achieve-category">
-                        <h4>{cat.charAt(0).toUpperCase() + cat.slice(1)}</h4>
+                        <h3>{cat.charAt(0).toUpperCase() + cat.slice(1)}</h3>
                         <div className="wj-achieve-grid">
                           {catAchievements.map(a => {
                             const Icon = getIcon(a.icon_name)

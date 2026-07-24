@@ -51,7 +51,7 @@ export function HealerAnalytics({ healerId, onClose }: {
 
   return (
     <div className="feature-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="ha-window">
+      <div className="ha-window" role="dialog" aria-modal="true" aria-label="Healer analytics">
         <header className="ha-header">
           <div>
             <h2><BarChart3 size={20} /> Analytics Dashboard</h2>

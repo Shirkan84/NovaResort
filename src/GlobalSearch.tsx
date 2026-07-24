@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Search, X, CalendarDays, Headphones, User, ArrowRight, Loader2 } from 'lucide-react'
 import { searchGlobal, type GlobalSearchResult } from './services/search'
+import { useFocusTrap } from './hooks/useFocusTrap'
 
 type GroupedResults = {
   sessions: GlobalSearchResult[];
@@ -67,9 +68,10 @@ export function GlobalSearch({onClose,onSelect}:{onClose:()=>void;onSelect:(type
   }
 
   let idx=-1
+  const trapRef=useFocusTrap(true)
 
   return <div className="gs-overlay" onClick={onClose}>
-    <div className="gs-modal" onClick={e=>e.stopPropagation()} onKeyDown={handleKeyDown}>
+    <div className="gs-modal" ref={trapRef} role="dialog" aria-modal="true" aria-label="Search" onClick={e=>e.stopPropagation()} onKeyDown={handleKeyDown}>
       <div className="gs-search-bar">
         <Search size={18}/>
         <input ref={inputRef} value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search healers, sessions, podcasts…" aria-label="Global search"/>
@@ -92,7 +94,7 @@ export function GlobalSearch({onClose,onSelect}:{onClose:()=>void;onSelect:(type
                 onClick={()=>onSelect(r.entity_type,r.id)}
                 onMouseEnter={()=>setActiveIndex(idx)}
                 data-index={idx}>
-                <div className="gs-result-icon">{r.image_url?<img src={r.image_url} alt=""/>:getIcon(r.entity_type)}</div>
+                <div className="gs-result-icon">{r.image_url?<img src={r.image_url} alt={r.title ? r.title + " image" : "Search result image"}/>:getIcon(r.entity_type)}</div>
                 <div className="gs-result-info">
                   <div className="gs-result-title">{r.title}{r.badge&&<span className={`gs-badge ${r.badge==='LIVE'?'live':r.badge==='Verified'?'verified':''}`}>{r.badge}</span>}</div>
                   <div className="gs-result-subtitle">{r.subtitle}</div>

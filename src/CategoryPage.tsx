@@ -79,7 +79,7 @@ export function CategoryPage({slug,userId,onClose,onOpenSession,onOpenProfile,on
                   {s.location && <span><MapPin size={10}/> {s.location}</span>}
                 </div>
                 <div className="explore-session-host">
-                  <span>{s.host_avatar ? <img src={s.host_avatar} alt=""/> : initials(s.host_name)}</span>
+                  <span>{s.host_avatar ? <img src={s.host_avatar} alt={s.host_name ? s.host_name + " avatar" : "Host avatar"}/> : initials(s.host_name)}</span>
                   {s.host_name}
                 </div>
               </div>
@@ -92,7 +92,7 @@ export function CategoryPage({slug,userId,onClose,onOpenSession,onOpenProfile,on
           <div className="explore-healer-grid">
             {healers.map(h => <button key={h.id} className="explore-healer-card" onClick={() => onOpenProfile(h.id)}>
               <div className="explore-healer-avatar">
-                {h.avatar_url ? <img src={h.avatar_url} alt=""/> : initials(h.full_name)}
+                {h.avatar_url ? <img src={h.avatar_url} alt={(h.full_name) + " avatar"}/> : initials(h.full_name)}
                 {h.online && <span className="online-dot"/>}
               </div>
               <h4>{h.display_name || h.full_name}</h4>
@@ -105,7 +105,7 @@ export function CategoryPage({slug,userId,onClose,onOpenSession,onOpenProfile,on
           <div className="category-section-head"><h2><Headphones size={16}/> Podcasts</h2></div>
           <div className="explore-podcast-grid">
             {podcasts.map(p => <button key={p.id} className="explore-podcast-card" onClick={() => onOpenPodcast(p.id)}>
-              <div className="explore-podcast-cover">{p.cover_image_url ? <img src={p.cover_image_url} alt=""/> : <Headphones size={20}/>}</div>
+              <div className="explore-podcast-cover">{p.cover_image_url ? <img src={p.cover_image_url} alt={p.title ? p.title + " cover" : "Podcast cover"}/> : <Headphones size={20}/>}</div>
               <div className="explore-podcast-info">
                 <h4>{p.title}</h4>
                 {p.short_description && <p>{p.short_description}</p>}

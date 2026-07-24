@@ -287,7 +287,7 @@ export function HealerProfile({
         {/* Cover */}
         <div className="hp-cover">
           {profile.cover_image_url ? (
-            <img src={profile.cover_image_url} alt="" />
+            <img src={profile.cover_image_url} alt={profile.full_name ? profile.full_name + " cover" : "Healer cover image"} />
           ) : (
             <div className="hp-cover-placeholder" />
           )}
@@ -523,7 +523,7 @@ export function HealerProfile({
                         <div className="hp-review-header">
                           <div className="hp-review-avatar">
                             {r.reviewer_avatar ? (
-                              <img src={r.reviewer_avatar} alt="" />
+                              <img src={r.reviewer_avatar} alt={r.reviewer_name ? r.reviewer_name + " avatar" : "Reviewer avatar"} />
                             ) : (
                               <span>{r.reviewer_name[0]}</span>
                             )}

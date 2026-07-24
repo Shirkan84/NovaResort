@@ -134,7 +134,7 @@ export function Favorites({ userId, onClose, onOpenProfile, onOpenPodcast, onOpe
 
   return (
     <div className="feature-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <section className="directory-window favorites-window">
+      <section className="directory-window favorites-window" role="dialog" aria-modal="true" aria-label="Favorites">
         <header>
           <div>
             <h2>My Favorites</h2>
@@ -169,7 +169,7 @@ export function Favorites({ userId, onClose, onOpenProfile, onOpenPodcast, onOpe
               ) : healers.map(h => (
                 <article className="favorite-row" key={h.save_id}>
                   <button className="favorite-avatar" onClick={() => onOpenProfile(h.healer_id)}>
-                    <span className="avatar healer rose">{h.avatar_url ? <img src={h.avatar_url} alt="" loading="lazy" /> : initials(h.display_name || h.full_name)}<i className={h.online ? 'online' : ''} /></span>
+                    <span className="avatar healer rose">{h.avatar_url ? <img src={h.avatar_url} alt={(h.display_name || h.full_name) + " avatar"} loading="lazy" /> : initials(h.display_name || h.full_name)}<i className={h.online ? 'online' : ''} /></span>
                   </button>
                   <div className="favorite-info">
                     <button onClick={() => onOpenProfile(h.healer_id)}>{h.display_name || h.full_name}</button>
@@ -211,7 +211,7 @@ export function Favorites({ userId, onClose, onOpenProfile, onOpenPodcast, onOpe
               ) : followedHealers.map(h => (
                 <article className="favorite-row" key={h.follower_id}>
                   <button className="favorite-avatar" onClick={() => onOpenProfile(h.healer_id)}>
-                    <span className="avatar healer rose">{h.avatar_url ? <img src={h.avatar_url} alt="" loading="lazy" /> : initials(h.display_name || h.full_name)}<i className={h.online ? 'online' : ''} /></span>
+                    <span className="avatar healer rose">{h.avatar_url ? <img src={h.avatar_url} alt={(h.display_name || h.full_name) + " avatar"} loading="lazy" /> : initials(h.display_name || h.full_name)}<i className={h.online ? 'online' : ''} /></span>
                   </button>
                   <div className="favorite-info">
                     <button onClick={() => onOpenProfile(h.healer_id)}>{h.display_name || h.full_name}</button>

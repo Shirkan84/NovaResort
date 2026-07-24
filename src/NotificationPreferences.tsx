@@ -49,7 +49,7 @@ export function NotificationPreferences({userId, onClose}:{
     setSaving(null)
   }
 
-  return <div className="feature-overlay"><section className="npref-window">
+  return <div className="feature-overlay"><section className="npref-window" role="dialog" aria-modal="true" aria-label="Notification preferences">
     <header>
       <div><h2><Bell size={18}/> Notification Preferences</h2></div>
       <button onClick={onClose}><X size={18}/></button>

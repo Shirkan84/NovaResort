@@ -144,12 +144,12 @@ export function Homepage({ userId, name, canCreateContent, liveHealers, healersL
                 const isLive = startsAt <= new Date() && (!s.ends_at || new Date(s.ends_at) >= new Date())
                 return <article className="session-card" key={s.id} onClick={() => onOpenFeature('sessions')}>
                   <div className="session-card-header">
-                    {s.cover_image_url ? <img src={s.cover_image_url} alt="" className="session-cover" loading="lazy" /> : <div className="session-cover-placeholder"><CalendarDays size={24} /></div>}
+                    {s.cover_image_url ? <img src={s.cover_image_url} alt={s.title || "Session cover"} className="session-cover" loading="lazy" /> : <div className="session-cover-placeholder"><CalendarDays size={24} /></div>}
                     {isLive && <span className="live-badge">LIVE</span>}
                     {s.category && <span className="category-badge">{s.category}</span>}
                   </div>
                   <div className="session-card-body">
-                    <div className="session-host"><span className="avatar small">{host?.avatar_url ? <img src={host.avatar_url} alt="" loading="lazy" /> : hostInitials}</span><span>{hostName}</span></div>
+                    <div className="session-host"><span className="avatar small">{host?.avatar_url ? <img src={host.avatar_url} alt={hostName + " avatar"} loading="lazy" /> : hostInitials}</span><span>{hostName}</span></div>
                     <h3>{s.title}</h3>
                     <div className="session-meta">
                       <span><CalendarDays size={13} /> {startsAt.toLocaleDateString([], { dateStyle: 'medium' })}</span>
@@ -230,7 +230,7 @@ export function Homepage({ userId, name, canCreateContent, liveHealers, healersL
 
       <aside className="right-col">
         <section className="panel conversations"><div className="panel-head"><h3>Recent conversations</h3><button onClick={() => onOpenFeature('messages')}>View all</button></div>
-          {recentMessages.length === 0 ? <p className="mini-empty">No community messages yet.</p> : recentMessages.map(c => <button className="conversation" key={c.id} onClick={() => c.rooms && onOpenRoom({ id: c.rooms.id, name: c.rooms.name, description: 'Community conversation', icon: '♡', theme: 'sage', is_private: false })}><div className="avatar soft">{c.profiles?.avatar_url ? <img src={c.profiles.avatar_url} alt="" /> : (c.profiles?.full_name || 'N').slice(0, 1)}</div><div><b>{c.profiles?.full_name || 'Community member'}</b><p>{c.body}</p></div><span>{new Date(c.created_at).toLocaleDateString()}</span></button>)}
+          {recentMessages.length === 0 ? <p className="mini-empty">No community messages yet.</p> : recentMessages.map(c => <button className="conversation" key={c.id} onClick={() => c.rooms && onOpenRoom({ id: c.rooms.id, name: c.rooms.name, description: 'Community conversation', icon: '♡', theme: 'sage', is_private: false })}><div className="avatar soft">{c.profiles?.avatar_url ? <img src={c.profiles.avatar_url} alt={(c.profiles?.full_name || 'Community member') + " avatar"} /> : (c.profiles?.full_name || 'N').slice(0, 1)}</div><div><b>{c.profiles?.full_name || 'Community member'}</b><p>{c.body}</p></div><span>{new Date(c.created_at).toLocaleDateString()}</span></button>)}
           <button className="new-message" onClick={() => onOpenFeature('discover')}><Send size={16} /> Start a new message</button>
         </section>
 

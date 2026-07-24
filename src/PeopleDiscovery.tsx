@@ -148,7 +148,7 @@ function PeopleDiscoveryPanel({ userId, onClose, onOpenRoom, onOpenProfile }:{ u
   }
 
   return <div className="feature-overlay">
-    <section className="directory-window discovery-window">
+    <section className="directory-window discovery-window" role="dialog" aria-modal="true" aria-label="People discovery">
       <header>
         <div><h2>Discover Members</h2><p>Meet people across Nova Resort, explore their profiles, and build meaningful connections.</p></div>
         <button onClick={onClose}><X/></button>
@@ -292,7 +292,7 @@ export function HealersDirectory({ userId, onClose, onOpenRoom, onOpenProfile, o
   useEffect(() => { setPage(0) }, [debouncedQuery, professionalType, language, country, onlineOnly, verifiedOnly, availability])
 
   return <div className="feature-overlay">
-    <section className="directory-window discovery-window healers-window">
+    <section className="directory-window discovery-window healers-window" role="dialog" aria-modal="true" aria-label="People discovery">
       <header>
         <div><h2>Healers Directory</h2><p>Browse active wellness professionals who allow discovery on Nova Resort.</p></div>
         <button onClick={onClose}><X/></button>

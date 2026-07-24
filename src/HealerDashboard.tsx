@@ -350,7 +350,7 @@ export function HealerDashboard({userId,onOpenSession,onCreateSession,onClose}:{
         <div className="hd-section-head"><h3><Bell size={15}/> Recent Activity</h3><button onClick={()=>window.location.hash='#/notifications'}>All notifications <ChevronRight size={14}/></button></div>
         <div className="hd-activity-list">{recentActivity.map(a=>
           <button key={a.id} className="hd-activity-row" onClick={a.action}>
-            <div className="hd-activity-avatar">{a.actorAvatar?<img src={a.actorAvatar} alt=""/>:<span>{a.actorName[0]}</span>}</div>
+            <div className="hd-activity-avatar">{a.actorAvatar?<img src={a.actorAvatar} alt={a.actorName ? a.actorName + " avatar" : "Actor avatar"}/>:<span>{a.actorName[0]}</span>}</div>
             <div className="hd-activity-info"><p><b>{a.actorName}</b> {a.body||a.title||a.type}</p><span>{timeAgo(a.createdAt)}</span></div>
           </button>
         )}</div>
@@ -429,7 +429,7 @@ export function HealerDashboard({userId,onOpenSession,onCreateSession,onClose}:{
       {recentActivity.length===0?<div className="hd-empty"><Bell size={28}/><p>No recent activity.</p></div>
       :<div className="hd-activity-list full">{recentActivity.map(a=>
         <button key={a.id} className="hd-activity-row" onClick={a.action}>
-          <div className="hd-activity-avatar">{a.actorAvatar?<img src={a.actorAvatar} alt=""/>:<span>{a.actorName[0]}</span>}</div>
+          <div className="hd-activity-avatar">{a.actorAvatar?<img src={a.actorAvatar} alt={a.actorName ? a.actorName + " avatar" : "Actor avatar"}/>:<span>{a.actorName[0]}</span>}</div>
           <div className="hd-activity-info"><p><b>{a.actorName}</b> {a.body||a.title||a.type}</p><span>{timeAgo(a.createdAt)}</span></div>
         </button>
       )}</div>}

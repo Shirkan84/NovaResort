@@ -1,7 +1,9 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
+import './tokens.css'
 import './styles.css'
+import './components.css'
 import './routeLinks'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

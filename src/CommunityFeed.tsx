@@ -78,7 +78,7 @@ export function CommunityFeed({userId, onClose, onOpenSession, onOpenPodcast, on
     return <span className="feed-badge">New Healer</span>
   }
 
-  return <div className="feature-overlay"><section className="feed-window">
+  return <div className="feature-overlay"><section className="feed-window" role="dialog" aria-modal="true" aria-label="Activity feed">
     <header>
       <div><h2><Sparkles size={18}/> Activity Feed</h2><p>Latest activity from healers you follow and content you might enjoy.</p></div>
       <button onClick={onClose}><X/></button>
@@ -118,8 +118,8 @@ export function CommunityFeed({userId, onClose, onOpenSession, onOpenPodcast, on
             {item.description && <p className="feed-item-desc">{item.description}</p>}
           </div>
           <div className="feed-item-thumb">
-            {item.type === 'healer' ? <div className="feed-avatar">{item.avatar_url ? <img src={item.avatar_url} alt=""/> : initials(item.title)}</div> :
-             item.cover_image_url ? <img src={item.cover_image_url} alt=""/> :
+            {item.type === 'healer' ? <div className="feed-avatar">{item.avatar_url ? <img src={item.avatar_url} alt={item.title ? item.title + " avatar" : "Avatar"}/> : initials(item.title)}</div> :
+             item.cover_image_url ? <img src={item.cover_image_url} alt={item.title ? item.title + " cover" : "Feed item cover"}/> :
              item.type === 'session' ? <CalendarDays size={20}/> : <Mic size={20}/>}
           </div>
           <ChevronRight size={16} className="feed-item-arrow"/>

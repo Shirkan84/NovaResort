@@ -56,7 +56,7 @@ export function SessionHistory({ userId, onClose, onNotice }: SessionHistoryProp
 
   return (
     <div className="feature-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <section className="directory-window session-history-window">
+      <section className="directory-window session-history-window" role="dialog" aria-modal="true" aria-label="Session history">
         <header>
           <div>
             <h2>My Sessions</h2>

@@ -195,7 +195,7 @@ export function SessionChatRoom({userId,isHealer,sessionId,onBack}:{userId:strin
             const isOwn=msg.user_id===userId
             const isMsgHost=session?.host_id===msg.user_id
             return <div key={msg.id} className={`chat-msg ${isOwn?'own':''} ${msg.pinned?'pinned':''} ${msg.body.startsWith('📢')?'announcement':''}`}>
-              <div className="chat-msg-avatar">{msg.profiles?.avatar_url?<img src={msg.profiles.avatar_url} alt=""/>:initials(msg.profiles?.display_name||msg.profiles?.full_name)}</div>
+              <div className="chat-msg-avatar">{msg.profiles?.avatar_url?<img src={msg.profiles.avatar_url} alt={(msg.profiles?.display_name || msg.profiles?.full_name || 'User') + " avatar"}/>:initials(msg.profiles?.display_name||msg.profiles?.full_name)}</div>
               <div className="chat-msg-content">
                 <div className="chat-msg-header">
                   <span className="chat-msg-name">{msg.profiles?.display_name||msg.profiles?.full_name||'User'}</span>
@@ -215,7 +215,7 @@ export function SessionChatRoom({userId,isHealer,sessionId,onBack}:{userId:strin
         </div>
 
         {roomOpen&&!roomEnded&&!sessionEnded&&(<form className="chat-composer" onSubmit={sendMessage}>
-          <textarea ref={inputRef} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage(e)}}} maxLength={2000} placeholder={isHost?"Send a message or announcement…":"Type a message…"} rows={1}/>
+          <textarea ref={inputRef} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage(e)}}} maxLength={2000} placeholder={isHost?"Send a message or announcement…":"Type a message…"} rows={1} aria-label="Chat message"/>
           <button type="submit" disabled={sending||!input.trim()}><Send size={16}/></button>
         </form>)}
 
@@ -226,7 +226,7 @@ export function SessionChatRoom({userId,isHealer,sessionId,onBack}:{userId:strin
       {showParticipants&&<div className="chat-participants-panel">
         <div className="panel-header"><h4>Participants ({participants.length})</h4><button onClick={()=>setShowParticipants(false)}><X size={14}/></button></div>
         <div className="panel-list">{participants.map(p=><div key={p.user_id} className="participant-row">
-          <div className="participant-avatar">{p.profiles?.avatar_url?<img src={p.profiles.avatar_url} alt=""/>:initials(p.profiles?.display_name||p.profiles?.full_name)}</div>
+          <div className="participant-avatar">{p.profiles?.avatar_url?<img src={p.profiles.avatar_url} alt={(p.profiles?.display_name || p.profiles?.full_name || 'User') + " avatar"}/>:initials(p.profiles?.display_name||p.profiles?.full_name)}</div>
           <div><b>{p.profiles?.display_name||p.profiles?.full_name||'User'}</b><small>{p.status}</small></div>
           {session?.host_id===p.user_id&&<span className="host-badge">HOST</span>}
         </div>)}</div>

@@ -33,7 +33,7 @@ export function ShareModal({title, url, onClose}:{
     <div className="share-modal" onClick={e=>e.stopPropagation()}>
       <h3>Share {title}</h3>
       <div className="share-url">
-        <input readOnly value={url}/>
+        <input readOnly value={url} aria-label="Share link"/>
         <button className="share-btn primary" onClick={copyLink}>{copied ? <><Check size={14}/> Copied</> : <><Copy size={14}/> Copy</>}</button>
       </div>
       <div className="share-actions">
@@ -85,7 +85,7 @@ export function ReportModal({title, onReport, onClose}:{
           {r}
         </button>)}
       </div>
-      <textarea className="report-details" placeholder="Additional details (optional)…" value={details} onChange={e=>setDetails(e.target.value)}/>
+      <textarea className="report-details" placeholder="Additional details (optional)…" value={details} onChange={e=>setDetails(e.target.value)} aria-label="Additional details"/>
       <div className="report-actions">
         <button className="cancel" onClick={onClose}>Cancel</button>
         <button className="submit" disabled={!selectedReason || submitting} onClick={handleSubmit}>

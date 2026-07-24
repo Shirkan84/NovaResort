@@ -42,7 +42,7 @@ export function ExplorePage({userId,onClose,onOpenSession,onOpenCategory}:{userI
 
   if(loading)return <div className="explore-overlay"><div className="explore-window"><div className="explore-loading"><Loader2 size={24} className="spin"/><span>Loading explore…</span></div></div></div>
 
-  return <div className="explore-overlay"><div className="explore-window">
+  return <div className="explore-overlay"><div className="explore-window" role="dialog" aria-modal="true" aria-label="Explore">
     <header className="explore-header">
       <div className="explore-header-left">
         <button className="explore-back" onClick={onClose}><X size={18}/></button>
@@ -75,7 +75,7 @@ export function ExplorePage({userId,onClose,onOpenSession,onOpenCategory}:{userI
             <div className="explore-session-body">
               <h3>{s.title}</h3>
               <div className="explore-session-meta"><span><CalendarDays size={11}/> {fmtDate(s.starts_at)}</span><span><Clock3 size={11}/> {fmtTime(s.starts_at)}</span></div>
-              <div className="explore-session-host"><span>{s.host_avatar?<img src={s.host_avatar} alt=""/>:initials(s.host_name)}</span>{s.host_name}</div>
+              <div className="explore-session-host"><span>{s.host_avatar?<img src={s.host_avatar} alt={s.host_name ? s.host_name + " avatar" : "Host avatar"}/>:initials(s.host_name)}</span>{s.host_name}</div>
             </div>
           </article>)}
         </div>
@@ -104,8 +104,8 @@ export function ExplorePage({userId,onClose,onOpenSession,onOpenCategory}:{userI
         <div className="explore-section-head"><h2><Star size={16}/> Featured Healers</h2><button onClick={()=>window.location.hash='#/healers'}>View all <ChevronRight size={14}/></button></div>
         <div className="explore-healer-grid">
           {featuredHealers.map(h=><article key={h.id} className="explore-healer-card" onClick={()=>window.location.hash=`#/profile/${h.id}`}>
-            <div className="explore-healer-avatar">{h.avatar_url?<img src={h.avatar_url} alt=""/>:initials(h.display_name||h.full_name)}{h.online&&<span className="online-dot"/>}</div>
-            <h4>{h.display_name||h.full_name}</h4>
+            <div className="explore-healer-avatar">{h.avatar_url?<img src={h.avatar_url} alt={(h.display_name||h.full_name) + " avatar"}/>:initials(h.display_name||h.full_name)}{h.online&&<span className="online-dot"/>}</div>
+            <h3>{h.display_name||h.full_name}</h3>
             <p>{h.professional_title||'Healer'}</p>
             {h.specialties&&h.specialties.length>0&&<div className="explore-healer-tags">{h.specialties.slice(0,2).map(s=><span key={s}>{s}</span>)}</div>}
             {h.country&&<span className="explore-healer-loc"><Globe size={10}/> {h.country}</span>}
@@ -118,9 +118,9 @@ export function ExplorePage({userId,onClose,onOpenSession,onOpenCategory}:{userI
         <div className="explore-section-head"><h2><Headphones size={16}/> Newest Podcasts</h2><button onClick={()=>window.location.hash='#/podcasts'}>View all <ChevronRight size={14}/></button></div>
         <div className="explore-podcast-grid">
           {newestPodcasts.map(p=><article key={p.id} className="explore-podcast-card" onClick={()=>window.location.hash=`#/podcasts/${p.id}`}>
-            <div className="explore-podcast-cover">{p.cover_image_url?<img src={p.cover_image_url} alt=""/>:<Headphones size={24}/>}</div>
+            <div className="explore-podcast-cover">{p.cover_image_url?<img src={p.cover_image_url} alt={p.title ? p.title + " cover" : "Podcast cover"}/>:<Headphones size={24}/>}</div>
             <div className="explore-podcast-info">
-              <h4>{p.title}</h4>
+              <h3>{p.title}</h3>
               <p>{p.short_description||'No description'}</p>
               <div className="explore-podcast-stats"><span><Play size={10}/> {p.total_plays} plays</span><span><Heart size={10}/> {p.follower_count} followers</span></div>
             </div>

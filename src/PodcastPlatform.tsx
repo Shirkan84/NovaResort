@@ -76,7 +76,7 @@ function Cover({ src, title }: { src?: string | null; title: string }) {
 
 function Creator({ podcast, onOpenProfile }: { podcast: Podcast; onOpenProfile: (id: string) => void }) {
   return <button className="podcast-creator" onClick={() => onOpenProfile(podcast.creator_id)}>
-    <span>{podcast.creator_avatar_url ? <img src={podcast.creator_avatar_url} alt="" /> : initials(podcast.creator_name)}</span>
+    <span>{podcast.creator_avatar_url ? <img src={podcast.creator_avatar_url} alt={podcast.creator_name ? podcast.creator_name + " avatar" : "Creator avatar"} /> : initials(podcast.creator_name)}</span>
     <b>{podcast.creator_name}</b>
     {podcast.verified && <BadgeCheck size={14} />}
   </button>
@@ -316,7 +316,7 @@ function EpisodeList({ podcast, userId, onPlay, selectedEpisodeId }: { podcast: 
         <div className="podcast-tags">{ep.tags.map(tag => <span key={tag}>{tag}</span>)}</div>
       </div>
       {reportingId === ep.id && <form className="report-inline" onSubmit={e => { e.preventDefault(); submitReport(ep) }}>
-        <input value={reportReason} onChange={e => setReportReason(e.target.value)} placeholder="Describe your concern..." required />
+        <input value={reportReason} onChange={e => setReportReason(e.target.value)} placeholder="Describe your concern..." required aria-label="Report reason" />
         <div className="report-actions">
           <button type="submit"><Send size={12} /> Submit</button>
           <button type="button" onClick={() => { setReportingId(null); setReportReason('') }}>Cancel</button>
@@ -343,9 +343,9 @@ function EpisodeList({ podcast, userId, onPlay, selectedEpisodeId }: { podcast: 
       {selected.video_url && <div className="episode-video-player"><video controls src={selected.video_url} preload="none" style={{ width: '100%', maxHeight: 400, borderRadius: 8 }} /></div>}
       {selected.transcript && <details className="transcript-details"><summary><FileAudio size={14} /> Transcript</summary><p>{selected.transcript}</p></details>}
       {selected.show_notes && <details className="transcript-details"><summary><FileAudio size={14} /> Show Notes</summary><p>{selected.show_notes}</p></details>}
-      {selected.comments_enabled ? <form className="comment-form" onSubmit={addComment}><input value={comment} onChange={e => setComment(e.target.value)} placeholder="Add a calm, respectful comment" /><button><Send size={14} /> Comment</button></form> : <p className="muted">Comments are disabled for this episode.</p>}
+      {selected.comments_enabled ? <form className="comment-form" onSubmit={addComment}><input value={comment} onChange={e => setComment(e.target.value)} placeholder="Add a calm, respectful comment" aria-label="Add a comment" /><button><Send size={14} /> Comment</button></form> : <p className="muted">Comments are disabled for this episode.</p>}
       {selected.comments_enabled && <div className="comment-list">{comments.map(c => <article key={c.id}><b>{c.profiles?.display_name || c.profiles?.full_name || 'Nova member'}</b>
-        {editingCommentId === c.id ? <div className="comment-edit"><input value={editingCommentBody} onChange={e => setEditingCommentBody(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') editComment(c.id); if (e.key === 'Escape') setEditingCommentId(null) }}/><div className="comment-edit-actions"><button onClick={() => editComment(c.id)}>Save</button><button onClick={() => setEditingCommentId(null)}>Cancel</button></div></div> :
+        {editingCommentId === c.id ? <div className="comment-edit"><input value={editingCommentBody} onChange={e => setEditingCommentBody(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') editComment(c.id); if (e.key === 'Escape') setEditingCommentId(null) }} aria-label="Edit comment"/><div className="comment-edit-actions"><button onClick={() => editComment(c.id)}>Save</button><button onClick={() => setEditingCommentId(null)}>Cancel</button></div></div> :
         <p>{c.body}</p>}
         <time>{new Date(c.created_at).toLocaleString()}{c.user_id === userId && editingCommentId !== c.id && <span className="comment-actions"><button onClick={() => { setEditingCommentId(c.id); setEditingCommentBody(c.body) }}>Edit</button><button onClick={() => deleteComment(c.id)}>Delete</button></span>}</time>
       </article>)}</div>}
@@ -1208,7 +1208,7 @@ export function PodcastPlatform({ userId, isHealer, podcastId, episodeId, studio
     setReportReason('')
   }
 
-  return <div className="feature-overlay"><section className="directory-window podcasts-window">
+  return <div className="feature-overlay"><section className="directory-window podcasts-window" role="dialog" aria-modal="true" aria-label="Podcasts">
     <header>
       <div><h2>{studio ? 'Podcast Studio' : selected ? 'Podcast' : 'Podcasts'}</h2><p>{studio ? 'Create, record, upload, and manage your podcast content.' : 'Discover real wellness audio from Nova Resort professionals.'}</p></div>
       {!studio && !selected && isHealer && <button className="healer-create-action" style={{ width: 'auto', padding: '0 12px' }} onClick={() => onOpenPodcast('manage')}><Mic size={14} /> Create Podcast</button>}
@@ -1244,7 +1244,7 @@ export function PodcastPlatform({ userId, isHealer, podcastId, episodeId, studio
             <button onClick={() => setReportMode(!reportMode)}><ShieldAlert size={14} /> Report</button>
           </div>
           {reportMode && <form className="report-inline" onSubmit={e => { e.preventDefault(); submitReport() }}>
-            <input value={reportReason} onChange={e => setReportReason(e.target.value)} placeholder="Describe your concern..." required />
+            <input value={reportReason} onChange={e => setReportReason(e.target.value)} placeholder="Describe your concern..." required aria-label="Report reason" />
             <div className="report-actions">
               <button type="submit"><Send size={12} /> Submit</button>
               <button type="button" onClick={() => { setReportMode(false); setReportReason('') }}>Cancel</button>
@@ -1257,9 +1257,9 @@ export function PodcastPlatform({ userId, isHealer, podcastId, episodeId, studio
     </div> : <div className="podcast-directory">
       <div className="podcast-filters">
         <label><Search size={15} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search title, healer, topic, tag, language, or description" /></label>
-        <select value={category} onChange={e => setCategory(e.target.value)}>{categories.map(c => <option key={c} value={c}>{c === 'all' ? 'All categories' : c}</option>)}</select>
-        <select value={language} onChange={e => setLanguage(e.target.value)}>{languages.map(l => <option key={l} value={l}>{l === 'all' ? 'All languages' : l}</option>)}</select>
-        <select value={sort} onChange={e => setSort(e.target.value)}>
+        <select value={category} onChange={e => setCategory(e.target.value)} aria-label="Filter by category">{categories.map(c => <option key={c} value={c}>{c === 'all' ? 'All categories' : c}</option>)}</select>
+        <select value={language} onChange={e => setLanguage(e.target.value)} aria-label="Filter by language">{languages.map(l => <option key={l} value={l}>{l === 'all' ? 'All languages' : l}</option>)}</select>
+        <select value={sort} onChange={e => setSort(e.target.value)} aria-label="Sort podcasts">
           <option value="popular">Most popular</option>
           <option value="newest">Newest</option>
           <option value="followed">Most followed</option>

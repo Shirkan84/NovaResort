@@ -88,6 +88,17 @@ header { height:72px;background:color-mix(in srgb,var(--card) 92%,transparent);b
   .compose-context,.typing-indicator{flex:none}
 }
 
+/* Touch target minimums for mobile */
+@media (max-width: 768px) {
+  button, a, input, select, textarea {
+    min-height: 44px;
+  }
+  .icon-btn, .nr-btn-icon {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
 .language-toggle{height:36px;border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:10px;padding:0 10px;display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700}.language-toggle svg{width:16px}.auth-language{position:fixed;z-index:10;top:22px;right:24px;background:#ffffffc9;color:#536f61;border-color:#dce5de;backdrop-filter:blur(8px)}
 [dir=rtl] body{font-family:'DM Sans',Arial,sans-serif;text-align:right}[dir=rtl] .sidebar{left:auto;right:0;border-right:0;border-left:1px solid var(--line)}[dir=rtl] main{margin-left:0;margin-right:246px}[dir=rtl] .header-actions{margin-left:0;margin-right:auto}[dir=rtl] .profile-mini,[dir=rtl] .nav-item{text-align:right}[dir=rtl] .side-card button,[dir=rtl] .section-head>button,[dir=rtl] .room-bottom button,[dir=rtl] .panel-head>button{flex-direction:row-reverse}[dir=rtl] .sidebar.open{transform:translateX(0)}[dir=rtl] .chat-window header>button:last-child,[dir=rtl] .directory-window header>button,[dir=rtl] .profile-window header>button,[dir=rtl] .notification-window header>button{margin-left:0;margin-right:auto}[dir=rtl] .chat-message.mine{margin-left:0;margin-right:auto}[dir=rtl] .chat-message:not(.mine){margin-right:0;margin-left:auto}[dir=rtl] .chat-message>div{border-radius:13px 4px 13px 13px}[dir=rtl] .chat-message.mine>div{border-radius:4px 13px 13px 13px}[dir=rtl] .auth-language{right:auto;left:24px}[dir=rtl] .forgot{align-self:flex-start}[dir=rtl] .conversation,[dir=rtl] .notice{text-align:right}
 @media(max-width:800px){[dir=rtl] .sidebar{transform:translateX(100%)}[dir=rtl] main{margin-right:0}[dir=rtl] .mobile-logo{margin-left:0;margin-right:6px}[dir=rtl] .search{margin-left:0;margin-right:18px}}

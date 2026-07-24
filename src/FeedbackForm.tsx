@@ -139,7 +139,7 @@ export function FeedbackForm({ onClose }: { onClose: () => void }) {
   if (submitState === 'success') {
     return (
       <div className="feature-overlay">
-        <section className="feedback-form">
+        <section className="feedback-form" role="dialog" aria-modal="true" aria-label="Feedback">
           <header>
             <div>
               <h2>Feedback Sent</h2>
@@ -160,7 +160,7 @@ export function FeedbackForm({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="feature-overlay">
-      <section className="feedback-form">
+      <section className="feedback-form" role="dialog" aria-modal="true" aria-label="Feedback">
         <header>
           <div>
             <h2>Send Feedback</h2>

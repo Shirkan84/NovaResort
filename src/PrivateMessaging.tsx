@@ -110,15 +110,15 @@ export function PrivateChats({onClose,onOpenRoom}:{onClose:()=>void;onOpenRoom:(
   const filteredPeople=people.filter(p=>displayName(p).toLowerCase().includes(q)||(p.country||'').toLowerCase().includes(q))
   const filteredRooms=rooms.filter(r=>r.name.toLowerCase().includes(q)||(r.last_message||'').toLowerCase().includes(q))
 
-  return <div className="pm-overlay"><section className="pm-inbox">
+  return <div className="pm-overlay"><section className="pm-inbox" role="dialog" aria-modal="true" aria-label="Private messages">
     <header className="pm-inbox-header"><div><h2>{creating?'New Conversation':'Messages'}</h2><p className="pm-subtitle">{creating?'Choose one person to start a private conversation.':'Your private conversations.'}</p></div><div className="pm-inbox-actions"><button className="pm-btn-sm" onClick={()=>setCreating(!creating)}>{creating?'Back':'New'}</button><button className="pm-icon-btn" onClick={onClose} aria-label="Close"><X size={18}/></button></div></header>
     <label className="pm-search"><Search size={14}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder={creating?'Search people...':'Search conversations...'}/></label>
-    {!creating&&requests.length>0&&<section className="pm-requests"><h3>Connection requests</h3>{requests.map(request=>{const p=request.profiles;return <article key={request.id}><span className="pm-req-avatar">{p?.avatar_url?<img src={p.avatar_url} alt=""/>:initials(displayName(p||{} as Profile))}</span><div className="pm-req-info"><b>{p?displayName(p):'Member'}</b><small>Wants to connect</small></div><div className="pm-req-actions"><button disabled={busy===request.id} onClick={()=>respond(request,'accepted')}>Accept</button><button disabled={busy===request.id} onClick={()=>respond(request,'declined')}>Decline</button></div></article>})}</section>}
-    {creating?<div className="pm-list">{filteredPeople.length===0?<div className="pm-empty"><p>No people found.</p></div>:filteredPeople.map(p=><article key={p.id} className="pm-person-row"><span className="pm-avatar">{p.avatar_url?<img src={p.avatar_url} alt=""/>:initials(displayName(p))}<i className={p.online?'online':''}/></span><div className="pm-person-info"><h3>{displayName(p)}{p.profile_type==='healer'&&<em>Healer</em>}</h3><p>{p.country||'Community member'}</p></div><button className="pm-msg-btn" disabled={busy===p.id} onClick={()=>createRoom(p)}>{busy===p.id?'...':'Message'}</button></article>)}</div>:
+    {!creating&&requests.length>0&&<section className="pm-requests"><h3>Connection requests</h3>{requests.map(request=>{const p=request.profiles;return <article key={request.id}><span className="pm-req-avatar">{p?.avatar_url?<img src={p.avatar_url} alt={displayName(p||{} as Profile) + " avatar"}/>:initials(displayName(p||{} as Profile))}</span><div className="pm-req-info"><b>{p?displayName(p):'Member'}</b><small>Wants to connect</small></div><div className="pm-req-actions"><button disabled={busy===request.id} onClick={()=>respond(request,'accepted')}>Accept</button><button disabled={busy===request.id} onClick={()=>respond(request,'declined')}>Decline</button></div></article>})}</section>}
+    {creating?<div className="pm-list">{filteredPeople.length===0?<div className="pm-empty"><p>No people found.</p></div>:filteredPeople.map(p=><article key={p.id} className="pm-person-row"><span className="pm-avatar">{p.avatar_url?<img src={p.avatar_url} alt={displayName(p) + " avatar"}/>:initials(displayName(p))}<i className={p.online?'online':''}/></span><div className="pm-person-info"><h3>{displayName(p)}{p.profile_type==='healer'&&<em>Healer</em>}</h3><p>{p.country||'Community member'}</p></div><button className="pm-msg-btn" disabled={busy===p.id} onClick={()=>createRoom(p)}>{busy===p.id?'...':'Message'}</button></article>)}</div>:
       loading?<div className="pm-empty">Loading...</div>:
       error?<div className="pm-empty">{error}</div>:
       rooms.length===0?<div className="pm-empty"><p>No conversations yet.</p><button className="pm-btn-primary" onClick={()=>setCreating(true)}>Start a conversation</button></div>:
-      <div className="pm-list">{filteredRooms.map(r=><button className={r.unread_count?'pm-room unread':'pm-room'} key={r.id} onClick={()=>{onClose();onOpenRoom(r)}}><span className="pm-avatar">{r.avatar_url?<img src={r.avatar_url} alt=""/>:r.name.slice(0,1)}<i className={r.other_online?'online':''}/></span><div className="pm-room-info"><h3>{r.name}{r.verified&&<BadgeCheck size={12}/>}</h3><p>{r.last_message||'Start chatting'}</p></div><div className="pm-room-meta"><time>{r.last_activity?new Date(r.last_activity).toLocaleDateString():''}</time>{Boolean(r.unread_count)&&<b className="pm-unread">{r.unread_count}</b>}</div></button>)}</div>}
+      <div className="pm-list">{filteredRooms.map(r=><button className={r.unread_count?'pm-room unread':'pm-room'} key={r.id} onClick={()=>{onClose();onOpenRoom(r)}}><span className="pm-avatar">{r.avatar_url?<img src={r.avatar_url} alt={r.name + " avatar"}/>:r.name.slice(0,1)}<i className={r.other_online?'online':''}/></span><div className="pm-room-info"><h3>{r.name}{r.verified&&<BadgeCheck size={12}/>}</h3><p>{r.last_message||'Start chatting'}</p></div><div className="pm-room-meta"><time>{r.last_activity?new Date(r.last_activity).toLocaleDateString():''}</time>{Boolean(r.unread_count)&&<b className="pm-unread">{r.unread_count}</b>}</div></button>)}</div>}
   </section></div>
 }
 
@@ -408,7 +408,7 @@ export function PrivateChatRoom({room,userId,onClose,onOpenProfile}:{room:DbRoom
       return <div key={m.id} className={`pm-msg-wrapper ${isMine?'mine':'theirs'}`}>
         {showDate&&<div className="pm-date-sep">{new Date(m.created_at).toLocaleDateString([],{dateStyle:'medium'})}</div>}
         {isFirstInGroup&&<div className={`pm-msg-group ${isMine?'mine':'theirs'}`}>
-          {!isMine&&<span className="pm-msg-avatar">{m.profiles?.avatar_url?<img src={m.profiles.avatar_url} alt=""/>:initials(m.profiles?.full_name)}</span>}
+          {!isMine&&<span className="pm-msg-avatar">{m.profiles?.avatar_url?<img src={m.profiles.avatar_url} alt={(m.profiles?.full_name || 'Member') + " avatar"}/>:initials(m.profiles?.full_name)}</span>}
           <div className="pm-msg-identity">{!isMine&&<span className="pm-msg-name">{m.profiles?.full_name||'Member'}</span>}</div>
         </div>}
         <div className={`pm-msg-row ${isMine?'mine':'theirs'} ${isFirstInGroup?'first':''} ${isLastInGroup?'last':''}`}>
@@ -445,11 +445,11 @@ export function PrivateChatRoom({room,userId,onClose,onOpenProfile}:{room:DbRoom
     })
   }
 
-  return <div className="pm-overlay"><section className="pm-chat">
+  return <div className="pm-overlay"><section className="pm-chat" role="dialog" aria-modal="true" aria-label="Private messages">
     <header className="pm-header">
       <button className="pm-back" onClick={onClose} aria-label="Back"><ChevronLeft size={20}/></button>
       <button className="pm-header-profile" onClick={()=>otherUserId&&onOpenProfile?.(otherUserId)}>
-        <span className="pm-header-avatar">{privateRoom.avatar_url?<img src={privateRoom.avatar_url} alt=""/>:initials(profileName)}<i className={`pm-status-dot ${presenceText==='Online now'?'online':''}`}/></span>
+        <span className="pm-header-avatar">{privateRoom.avatar_url?<img src={privateRoom.avatar_url} alt={profileName + " avatar"}/>:initials(profileName)}<i className={`pm-status-dot ${presenceText==='Online now'?'online':''}`}/></span>
         <div className="pm-header-info"><h2>{profileName}{privateRoom.verified&&<BadgeCheck size={14}/>}</h2><span>{presenceText}</span></div>
       </button>
       <div className="pm-header-actions">
@@ -465,7 +465,7 @@ export function PrivateChatRoom({room,userId,onClose,onOpenProfile}:{room:DbRoom
       </div>
     </header>
 
-    {searchOpen&&<div className="pm-search-bar"><Search size={14}/><input value={searchText} onChange={e=>setSearchText(e.target.value)} placeholder="Search messages..." autoFocus/><button onClick={()=>{setSearchOpen(false);setSearchText('')}}><X size={14}/></button></div>}
+    {searchOpen&&<div className="pm-search-bar"><Search size={14}/><input value={searchText} onChange={e=>setSearchText(e.target.value)} placeholder="Search messages..." autoFocus aria-label="Search messages"/><button onClick={()=>{setSearchOpen(false);setSearchText('')}}><X size={14}/></button></div>}
 
     {recordingState!=='idle'&&<div className="pm-recording-bar">
       <div className="pm-rec-dot"/>
@@ -509,7 +509,7 @@ export function PrivateChatRoom({room,userId,onClose,onOpenProfile}:{room:DbRoom
     {notice&&<div className="pm-notice">{notice} <button onClick={()=>setNotice('')}>Dismiss</button></div>}
 
     {replyTo&&<div className="pm-compose-context"><div className="pm-context-text"><span>Replying to {replyTo.sender_id===userId?'you':replyTo.profiles?.full_name||'member'}</span><p>{replyTo.body.slice(0,80)}</p></div><button onClick={()=>setReplyTo(null)} aria-label="Cancel reply"><X size={14}/></button></div>}
-    {editing&&<form className="pm-edit-bar" onSubmit={saveEdit}><input value={editText} onChange={e=>setEditText(e.target.value)} maxLength={4000} autoFocus/><button type="submit" aria-label="Save"><Check size={16}/></button><button type="button" onClick={()=>setEditing(null)} aria-label="Cancel"><X size={16}/></button></form>}
+    {editing&&<form className="pm-edit-bar" onSubmit={saveEdit}><input value={editText} onChange={e=>setEditText(e.target.value)} maxLength={4000} autoFocus aria-label="Edit message"/><button type="submit" aria-label="Save"><Check size={16}/></button><button type="button" onClick={()=>setEditing(null)} aria-label="Cancel"><X size={16}/></button></form>}
 
     {emojiOpen&&<div className="pm-emoji-picker">
       {emojiGroups.map(group=><section key={group[0]}><h4>{group[0]}</h4><div className="pm-emoji-grid">{group.slice(1).map(e=><button key={`${group[0]}-${e}`} onClick={()=>insertEmoji(e)}>{e}</button>)}</div></section>)}
@@ -525,7 +525,7 @@ export function PrivateChatRoom({room,userId,onClose,onOpenProfile}:{room:DbRoom
         <button type="button" className={`pm-tool-btn ${recordingState==='recording'||recordingState==='paused'?'recording':''}`} onClick={()=>startRecording(false)} aria-label="Record voice message"><Mic size={18}/></button>
       </div>
       <div className="pm-composer-input">
-        <textarea value={text} onChange={e=>updateText(e.target.value)} onKeyDown={composerKeyDown} maxLength={4000} placeholder="Write a message..." rows={1}/>
+        <textarea value={text} onChange={e=>updateText(e.target.value)} onKeyDown={composerKeyDown} maxLength={4000} placeholder="Write a message..." rows={1} aria-label="Write a message"/>
         <button type="submit" className="pm-send-btn" disabled={!text.trim()} aria-label="Send"><Send size={18}/></button>
       </div>
     </form>

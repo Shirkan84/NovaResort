@@ -286,7 +286,7 @@ export function MemberDashboard({ userId, name, onOpenFeature, onOpenProfile, on
                 {recommended.map(p => (
                   <article className="recommended-card" key={p.id}>
                     <div className="recommended-cover">
-                      {p.cover_image_url ? <img src={p.cover_image_url} alt="" loading="lazy" /> : <Headphones size={24} />}
+                      {p.cover_image_url ? <img src={p.cover_image_url} alt={p.title ? p.title + " cover" : "Podcast cover"} loading="lazy" /> : <Headphones size={24} />}
                     </div>
                     <div className="recommended-info">
                       <b>{p.title}</b>
@@ -319,7 +319,7 @@ export function MemberDashboard({ userId, name, onOpenFeature, onOpenProfile, on
                   <article className="healer-mini" key={h.save_id}>
                     <button className="healer-mini-avatar" onClick={() => onOpenProfile(h.healer_id)}>
                       <span className="avatar healer rose">
-                        {h.avatar_url ? <img src={h.avatar_url} alt="" loading="lazy" /> : initials(h.display_name || h.full_name)}
+                        {h.avatar_url ? <img src={h.avatar_url} alt={(h.display_name || h.full_name) + " avatar"} loading="lazy" /> : initials(h.display_name || h.full_name)}
                         <i className={h.online ? 'online' : ''} />
                       </span>
                     </button>
