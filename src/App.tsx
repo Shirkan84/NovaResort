@@ -28,6 +28,10 @@ import { MemberDashboard } from './MemberDashboard'
 import { Favorites } from './Favorites'
 import { SessionHistory } from './SessionHistory'
 import './member-dashboard.css'
+import { GlobalSearch } from './GlobalSearch'
+import { ExplorePage } from './Explore'
+import { CategoryPage } from './CategoryPage'
+import './explore.css'
 
 type Room = {
   title: string; description: string; people: number; color: string; icon: string; tags: string[]
@@ -36,21 +40,21 @@ type LiveProfile = { id:string;full_name:string;display_name:string|null;avatar_
 type RecentMessage = { id:string;body:string;created_at:string;profiles?:{full_name:string;avatar_url:string|null}|null;rooms?:{id:string;name:string}|null }
 type Friendship = { id:string; requester_id:string; addressee_id:string; status:string }
 type NextSession = { id:string; title:string; starts_at:string; host_id:string }
-type Feature = 'discover'|'people'|'healers'|'profile'|'notifications'|'messages'|'safety'|'connections'|'sessions'|'podcasts'|'healer'|'feedback'|'feedback-admin'|'dashboard'|'favorites'|'session-history'
+type Feature = 'discover'|'people'|'healers'|'profile'|'notifications'|'messages'|'safety'|'connections'|'sessions'|'podcasts'|'healer'|'feedback'|'feedback-admin'|'dashboard'|'favorites'|'session-history'|'explore'|'category'
 type AuthView = 'login'|'register'|'register-member'|'register-healer'|'check-email'|'callback'|null
-type AppRoute = { feature: Feature | null; roomId: string | null; profileId: string | null; podcastId: string | null; episodeId: string | null; podcastStudio: boolean; studioAction: string | null; studioPodcastId: string | null; studioEpisodeId: string | null; sessionId: string | null; sessionView: string | null; authView: AuthView; notFound: boolean }
+type AppRoute = { feature: Feature | null; roomId: string | null; profileId: string | null; podcastId: string | null; episodeId: string | null; podcastStudio: boolean; studioAction: string | null; studioPodcastId: string | null; studioEpisodeId: string | null; sessionId: string | null; sessionView: string | null; authView: AuthView; notFound: boolean; categorySlug: string | null }
 
 const BASE_URL = import.meta.env.VITE_BASE_URL || 'https://shirkan84.github.io/NovaResort/'
 const BASE_PATH = import.meta.env.VITE_BASE_PATH || '/NovaResort'
 
 function routeFromHash(): AppRoute {
   const urlParams = new URLSearchParams(window.location.search)
-  if (urlParams.get('code')) return { feature: null, roomId: null, profileId: null, podcastId: null, episodeId: null, podcastStudio: false, studioAction: null, studioPodcastId: null, studioEpisodeId: null, sessionId: null, sessionView: null, authView: 'callback', notFound: false }
+  if (urlParams.get('code')) return { feature: null, roomId: null, profileId: null, podcastId: null, episodeId: null, podcastStudio: false, studioAction: null, studioPodcastId: null, studioEpisodeId: null, sessionId: null, sessionView: null, authView: 'callback', notFound: false, categorySlug: null }
   const pathRoute = window.location.pathname
     .replace(new RegExp('^' + BASE_PATH.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '/?'), '')
     .replace(/^\/+|\/+$/g, '')
   const value = decodeURIComponent(window.location.hash.replace(/^#\/?/, '') || pathRoute || 'home')
-  const base = { feature: null, roomId: null, profileId: null, podcastId: null, episodeId: null, podcastStudio: false, studioAction: null as string | null, studioPodcastId: null as string | null, studioEpisodeId: null as string | null, sessionId: null as string | null, sessionView: null as string | null, authView: null as AuthView, notFound: false }
+  const base = { feature: null, roomId: null, profileId: null, podcastId: null, episodeId: null, podcastStudio: false, studioAction: null as string | null, studioPodcastId: null as string | null, studioEpisodeId: null as string | null, sessionId: null as string | null, sessionView: null as string | null, authView: null as AuthView, notFound: false, categorySlug: null as string | null }
   if (value === 'login') return { ...base, authView: 'login' }
   if (value === 'register') return { ...base, authView: 'register' }
   if (value === 'register/member') return { ...base, authView: 'register-member' }
@@ -93,6 +97,8 @@ function routeFromHash(): AppRoute {
     return { ...base, feature: 'sessions' }
   }
   if (value === 'sessions' || value === 'sessions/upcoming') return { ...base, feature: 'sessions' }
+  if (value.startsWith('category/')) return { ...base, feature: 'category', categorySlug: value.slice(9) || null }
+  if (value === 'explore') return { ...base, feature: 'explore' }
   if (value === 'notifications') return { ...base, feature: 'notifications' }
   if (value === 'favorites') return { ...base, feature: 'favorites' }
   if (value === 'session-history') return { ...base, feature: 'session-history' }
@@ -125,6 +131,8 @@ function navFromFeature(feature: Feature | null) {
   if (feature === 'dashboard') return 'Home'
   if (feature === 'favorites') return 'Home'
   if (feature === 'session-history') return 'Sessions'
+  if (feature === 'explore') return 'Home'
+  if (feature === 'category') return 'Home'
   return 'Home'
 }
 
@@ -269,6 +277,7 @@ function App() {
   const [profilePreview,setProfilePreview] = useState<LiveProfile|null>(null)
   const [currentAvatar,setCurrentAvatar] = useState<string|null>(null)
   const [podcastPlayer,setPodcastPlayer] = useState<PlayerEpisode|null>(null)
+  const [showGlobalSearch,setShowGlobalSearch] = useState(false)
   const [signingOut,setSigningOut] = useState(false)
   const [metrics,setMetrics] = useState({members:0,online:0,healers:0,rooms:0,sessions:0,notifications:0,connections:0})
   const { canCreateContent, profile: userProfile, isLoading: roleLoading } = useUserRole(session?.user?.id ?? null)
@@ -287,6 +296,14 @@ function App() {
   useEffect(() => applyLanguage(language), [language])
   useEffect(() => { localStorage.setItem('nova-theme', dark ? 'dark' : 'light') }, [dark])
   useEffect(() => { return () => { if (noticeTimer.current) window.clearTimeout(noticeTimer.current) } }, [])
+  useEffect(() => {
+    function handleKey(e:KeyboardEvent){
+      if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();setShowGlobalSearch(s=>!s)}
+      if(e.key==='Escape'&&showGlobalSearch)setShowGlobalSearch(false)
+    }
+    window.addEventListener('keydown',handleKey)
+    return()=>window.removeEventListener('keydown',handleKey)
+  },[showGlobalSearch])
   useEffect(() => {
     if (!session) return
     let cancelled = false
@@ -473,7 +490,7 @@ function App() {
       <header>
         <button className="icon-btn menu-btn" onClick={() => setMenuOpen(true)}><Menu size={22}/></button>
         <div className="mobile-logo"><Logo/></div>
-        <div className="search" onClick={()=>openFeature('discover')}><Search size={18}/><input aria-label="Search" readOnly placeholder="Search people, rooms, or topics..."/><span>⌘ K</span></div>
+        <div className="search" onClick={()=>setShowGlobalSearch(true)}><Search size={18}/><input aria-label="Search" readOnly placeholder="Search people, sessions, podcasts..."/><span>⌘ K</span></div>
         <div className="header-actions">
           <button className="language-toggle" onClick={()=>switchLanguage(language==='en'?'he':'en')}><Languages size={17}/>{language==='en'?'עברית':'English'}</button>
           <button className="icon-btn" aria-label="Toggle theme" onClick={() => setDark(!dark)}>{dark ? <Sun size={19}/> : <Moon size={19}/>}</button>
@@ -501,7 +518,7 @@ function App() {
         )}
         <footer className="app-footer">
           <div className="footer-about"><b>nova resort</b><p>A safe space to connect, reflect, and grow. Nova Resort is a peer-support community and wellness platform.</p><div className="footer-social"><a href="#" aria-label="Email">✉</a><a href="#" aria-label="Community">♡</a></div></div>
-          <div className="footer-col"><h4>Explore</h4><ul><li><button onClick={() => openFeature('discover')}>Discover People</button></li><li><button onClick={openHealers}>Healers</button></li><li><button onClick={() => openFeature('sessions')}>Sessions</button></li><li><button onClick={() => openPodcast()}>Podcasts</button></li><li><button onClick={() => openFeature('people')}>Community Rooms</button></li></ul></div>
+          <div className="footer-col"><h4>Explore</h4><ul><li><button onClick={() => openFeature('explore')}>Explore</button></li><li><button onClick={() => openFeature('discover')}>Discover People</button></li><li><button onClick={openHealers}>Healers</button></li><li><button onClick={() => openFeature('sessions')}>Sessions</button></li><li><button onClick={() => openPodcast()}>Podcasts</button></li><li><button onClick={() => openFeature('people')}>Community Rooms</button></li></ul></div>
           <div className="footer-col"><h4>Account</h4><ul><li><button onClick={() => openFeature('profile')}>My Profile</button></li><li><button onClick={() => openFeature('connections')}>Connections</button></li><li><button onClick={() => openFeature('messages')}>Messages</button></li><li><button onClick={() => openFeature('notifications')}>Notifications</button></li>{canCreateContent && <li><button onClick={() => openFeature('healer')}>Healer Dashboard</button></li>}</ul></div>
           <div className="footer-col"><h4>Support</h4><ul><li><button onClick={() => openFeature('safety')}>Safety Center</button></li><li><button onClick={() => openFeature('feedback')}>Send Feedback</button></li><li><button onClick={() => openFeature('safety')}>Community Guidelines</button></li><li><button onClick={() => openFeature('safety')}>Privacy Policy</button></li><li><button onClick={() => openFeature('safety')}>Terms of Service</button></li></ul></div>
           <div className="footer-bottom"><span>&copy; {new Date().getFullYear()} Nova Resort. All rights reserved.</span><span>Created by Shir Kanevsky</span></div>
@@ -527,6 +544,14 @@ function App() {
     {feature==='safety' && <SafetyCenter onClose={closeOverlay}/>} 
     {feature==='feedback' && <FeedbackForm onClose={closeOverlay}/>} 
     {feature==='feedback-admin' && <FeedbackAdmin onClose={closeOverlay}/>} 
+    {feature==='explore' && <ExplorePage userId={session.user.id} onClose={closeOverlay} onOpenSession={(id)=>{closeOverlay();openFeature('sessions');setTimeout(()=>setRoute(`sessions/${id}`),50)}} onOpenCategory={(slug)=>setRoute(`category/${slug}`)}/>}
+    {feature==='category' && <CategoryPage slug={route.categorySlug||''} userId={session.user.id} onClose={closeOverlay} onOpenSession={(id)=>{closeOverlay();openFeature('sessions');setTimeout(()=>setRoute(`sessions/${id}`),50)}} onOpenProfile={openProfile} onOpenPodcast={openPodcast} onOpenCategory={(slug)=>setRoute(`category/${slug}`)}/>}
+    {showGlobalSearch && <GlobalSearch onClose={()=>setShowGlobalSearch(false)} onSelect={(type,id)=>{
+      setShowGlobalSearch(false)
+      if(type==='session'){openFeature('sessions');setTimeout(()=>setRoute(`sessions/${id}`),50)}
+      else if(type==='podcast'){openPodcast(id)}
+      else if(type==='healer'){openProfile(id)}
+    }}/>}
     {profilePreview && profilePreview.profile_type === 'healer' && (
       <HealerProfile
         healerId={profilePreview.id}

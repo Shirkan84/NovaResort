@@ -1,7 +1,8 @@
 ﻿import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
-import { CalendarDays, Clock3, Globe, MapPin, Mic, MicOff, Monitor, Plus, Search, Send, Users, Video, VideoOff, X, ChevronRight, ChevronLeft, CircleDot, Pencil, Trash2, Pin, PinOff, UserX, Image, Check, MessageCircle, Share2, Download } from 'lucide-react'
+import { CalendarDays, Clock3, Globe, MapPin, Mic, MicOff, Monitor, Plus, Search, Send, Users, Video, VideoOff, X, ChevronRight, ChevronLeft, CircleDot, Pencil, Trash2, Pin, PinOff, UserX, Image, Check, MessageCircle, Share2, Download, SlidersHorizontal } from 'lucide-react'
 import { supabase } from './supabase'
 import { createLiveRoomProvider, type LiveRoomProvider, type LiveRoomParticipant } from './services/liveroom'
+import { searchSessions, type SessionSearchResult } from './services/search'
 import { SessionChatRoom } from './SessionChatRoom'
 import './sessions-events.css'
 
@@ -52,6 +53,9 @@ export function SessionsPage({userId,isHealer,onClose,initialSessionId,initialSe
   const [mine,setMine]=useState<{session_id:string;status:string}[]>([])
   const [tab,setTab]=useState<'upcoming'|'hosting'|'registered'|'live'|'past'>('upcoming')
   const [query,setQuery]=useState('')
+  const [categoryFilter,setCategoryFilter]=useState('all')
+  const [sortBy,setSortBy]=useState('upcoming')
+  const [showFilters,setShowFilters]=useState(false)
   const [showCreate,setShowCreate]=useState(false)
   const [loading,setLoading]=useState(true)
   const [error,setError]=useState('')
@@ -59,6 +63,7 @@ export function SessionsPage({userId,isHealer,onClose,initialSessionId,initialSe
   const [liveSessionId,setLiveSessionId]=useState<string|null>(null)
   const [chatSessionId,setChatSessionId]=useState<string|null>(null)
   const [editingId,setEditingId]=useState<string|null>(null)
+  const debounceRef=useRef<ReturnType<typeof setTimeout>|null>(null)
 
   useEffect(()=>{
     if(initialSessionId&&initialSessionView==='room')setLiveSessionId(initialSessionId)
@@ -68,24 +73,33 @@ export function SessionsPage({userId,isHealer,onClose,initialSessionId,initialSe
 
   const load=useCallback(async()=>{
     setLoading(true);setError('')
-    const [{data,error},{data:registrations,error:regError},{data:roomStates}]=await Promise.all([
-      supabase.from('sessions').select('*,profiles!sessions_host_id_fkey(full_name,display_name,avatar_url,profile_type,specialties),session_registrations(status,user_id)').order('starts_at',{ascending:true}).limit(80),
-      supabase.from('session_registrations').select('session_id,status').eq('user_id',userId).in('status',['registered','waitlisted']),
-      supabase.from('session_room_state').select('session_id,status,started_at,ended_at')
-    ])
-    if(error){setError(error.message);setLoading(false);return}
-    if(regError)console.error('Failed to load registrations:',regError.message)
-    const rows=(data as unknown as SessionRow[])||[]
-    if(roomStates&&roomStates.length>0){
-      const stateMap=new Map(roomStates.map((rs:any)=>[rs.session_id,rs]))
-      rows.forEach(r=>{const rs=stateMap.get(r.id);if(rs)r.session_room_state={status:rs.status,started_at:rs.started_at,ended_at:rs.ended_at}})
-    }
-    setItems(rows)
-    setMine((registrations as {session_id:string;status:string}[])||[])
-    setLoading(false)
-  },[userId])
+    try{
+      const [{data:rpcData,total},regRes]=await Promise.all([
+        searchSessions({search_text:query,category_filter:categoryFilter,sort_by:sortBy,page_limit:80}),
+        supabase.from('session_registrations').select('session_id,status').eq('user_id',userId).in('status',['registered','waitlisted']),
+      ])
+      if(regRes.error)console.error('Failed to load registrations:',regRes.error.message)
+      const mapped:SessionRow[]=rpcData.map(r=>({
+        id:r.id,host_id:r.host_id,title:r.title,description:r.description,category:r.category,language:r.language,
+        starts_at:r.starts_at,ends_at:r.ends_at,timezone:r.timezone,capacity:r.capacity,visibility:r.visibility,status:r.status,
+        registration_deadline:r.registration_deadline,chat_enabled:true,live_room_id:'',live_room_provider:'jitsi',
+        session_type:r.session_type,price:r.price,currency:r.currency,location:r.location,meeting_url:null,
+        cover_image_url:r.cover_image_url,
+        profiles:{full_name:r.host_name,display_name:r.host_name,avatar_url:r.host_avatar,profile_type:'healer',specialties:[]},
+        session_registrations:[],session_room_state:r.room_status?{status:r.room_status,started_at:null,ended_at:null}:null,
+      }))
+      setItems(mapped)
+      setMine((regRes.data as {session_id:string;status:string}[])||[])
+    }catch(e:any){setError(e.message||'Failed to load')}finally{setLoading(false)}
+  },[query,categoryFilter,sortBy,userId])
 
   useEffect(()=>{load();const c=supabase.channel(`sessions-${userId}`).on('postgres_changes',{event:'*',schema:'public',table:'sessions'},()=>load()).on('postgres_changes',{event:'*',schema:'public',table:'session_registrations'},()=>load()).subscribe();return()=>{supabase.removeChannel(c)}},[userId,load])
+
+  function handleQueryChange(v:string){
+    setQuery(v)
+    if(debounceRef.current)clearTimeout(debounceRef.current)
+    debounceRef.current=setTimeout(()=>{},300)
+  }
 
   async function updateSession(id:string,updates:Partial<SessionRow>){
     const {error}=await supabase.from('sessions').update(updates).eq('id',id)
@@ -144,7 +158,7 @@ export function SessionsPage({userId,isHealer,onClose,initialSessionId,initialSe
     return <SessionChatRoom userId={userId} isHealer={isHealer} sessionId={chatSessionId} onBack={()=>{setChatSessionId(null);load()}}/>
   }
 
-  return <div className="feature-overlay"><section className={`sessions-window ${showCreate?'has-create-form':''}`}><header><div><h2>Sessions</h2><p>Events, workshops, guided practices, and community gatherings.</p></div>{isHealer?<button className="create-session" onClick={()=>setShowCreate(true)}><Plus/> Create session</button>:null}<button onClick={onClose}><X/></button></header><div className="session-tabs">{(['upcoming','live','registered','hosting','past'] as const).map(t=><button key={t} className={tab===t?'active':''} onClick={()=>setTab(t)}>{t[0].toUpperCase()+t.slice(1)}</button>)}</div><label className="session-search"><Search size={15}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search by title, host, category, or language"/></label>{showCreate&&<CreateSessionForm userId={userId} onCreated={()=>{setShowCreate(false);load()}} onCancel={()=>setShowCreate(false)}/>}{error&&<div className="session-error">{error}<button onClick={()=>setError('')}>×</button></div>}{loading?<div className="session-loading">Loading sessions…</div>:visible.length===0?<div className="session-empty"><CalendarDays size={28}/><p>{tab==='live'?'No live sessions right now.':tab==='past'?'No past sessions.':tab==='registered'?'You have not registered for any sessions.':tab==='hosting'?'You are not hosting any sessions.':query?'No sessions match your search.':'No upcoming sessions.'}</p></div>:<div className="session-grid">{visible.map(s=>{const isHost=s.host_id===userId;const reg=mine.find(r=>r.session_id===s.id);const isLive=s.session_room_state?.status==='live';return <article className={`session-card ${isLive?'live':''}`} key={s.id} onClick={()=>setDetailId(s.id)}><div className={`session-cover ${isLive?'live-cover':''}`} style={s.cover_image_url?{backgroundImage:`url(${s.cover_image_url})`,backgroundSize:'cover',backgroundPosition:'center'}:undefined}><div className="session-cover-top"><Video size={22}/><div className="session-cover-labels"><span className="session-type-badge">{s.session_type==='in_person'?'In Person':s.session_type==='hybrid'?'Hybrid':'Online'}</span>{isLive&&<span className="live-badge"><CircleDot size={10}/> LIVE</span>}{reg&&reg.status==='waitlisted'&&<span className="waitlist-badge">Waitlisted</span>}</div></div><span className="session-category-tag">{s.category}</span></div><div className="session-body"><div className="session-host"><span>{s.profiles?.avatar_url?<img src={s.profiles.avatar_url} alt=""/>:initials(s.profiles?.display_name||s.profiles?.full_name)}</span><div><b>{s.profiles?.display_name||s.profiles?.full_name||'Host'}</b><small>{isHost?'You':'Healer'}</small></div></div><h3>{s.title}</h3><p>{s.description.slice(0,120)}{s.description.length>120?'…':''}</p><div className="session-meta"><span><CalendarDays size={12}/> {fmtDate(s.starts_at)}</span><span><Clock3 size={12}/> {fmtTime(s.starts_at)} – {fmtTime(s.ends_at)}</span><span>{duration(s.starts_at,s.ends_at)}</span><span><Users size={12}/> {s.capacity} spots</span>{s.price>0&&<span>${s.price}</span>}</div><div className="session-actions">{isLive&&<button className="join-live-btn" onClick={(e)=>{e.stopPropagation();setDetailId(s.id)}}><CircleDot size={14}/> Join Live</button>}{!isHost&&!reg&&!isRegistrationClosed(s)&&<button onClick={(e)=>{e.stopPropagation();register(s)}}>Register</button>}{!isHost&&!reg&&isRegistrationClosed(s)&&<button disabled className="reg-closed">Registration Closed</button>}{!isHost&&reg&&reg.status==='registered'&&<button className="registered-btn" onClick={(e)=>{e.stopPropagation();register(s)}}>Cancel</button>}{!isHost&&reg&&reg.status==='waitlisted'&&<button className="waitlisted-btn" onClick={(e)=>{e.stopPropagation();register(s)}}>Leave Waitlist</button>}{isHost&&<button onClick={(e)=>{e.stopPropagation();setDetailId(s.id)}}>Manage</button>}</div></div></article>})}</div>}</section></div>
+  return <div className="feature-overlay"><section className={`sessions-window ${showCreate?'has-create-form':''}`}><header><div><h2>Sessions</h2><p>Events, workshops, guided practices, and community gatherings.</p></div>{isHealer?<button className="create-session" onClick={()=>setShowCreate(true)}><Plus/> Create session</button>:null}<button onClick={onClose}><X/></button></header><div className="session-tabs">{(['upcoming','live','registered','hosting','past'] as const).map(t=><button key={t} className={tab===t?'active':''} onClick={()=>setTab(t)}>{t[0].toUpperCase()+t.slice(1)}</button>)}</div><div className="session-search-row"><label className="session-search"><Search size={15}/><input value={query} onChange={e=>handleQueryChange(e.target.value)} placeholder="Search by title, host, category, or language"/></label><button className={`filter-toggle ${showFilters?'active':''}`} onClick={()=>setShowFilters(!showFilters)}><SlidersHorizontal size={14}/> Filters</button></div>{showFilters&&<div className="session-filters"><select value={categoryFilter} onChange={e=>setCategoryFilter(e.target.value)}><option value="all">All Categories</option>{categories.map(c=><option key={c}>{c}</option>)}</select><select value={sortBy} onChange={e=>setSortBy(e.target.value)}><option value="upcoming">Upcoming</option><option value="newest">Newest</option><option value="popular">Most Popular</option></select></div>}{showCreate&&<CreateSessionForm userId={userId} onCreated={()=>{setShowCreate(false);load()}} onCancel={()=>setShowCreate(false)}/>}{error&&<div className="session-error">{error}<button onClick={()=>setError('')}>×</button></div>}{loading?<div className="session-loading">Loading sessions…</div>:visible.length===0?<div className="session-empty"><CalendarDays size={28}/><p>{tab==='live'?'No live sessions right now.':tab==='past'?'No past sessions.':tab==='registered'?'You have not registered for any sessions.':tab==='hosting'?'You are not hosting any sessions.':query?'No sessions match your search.':'No upcoming sessions.'}</p></div>:<div className="session-grid">{visible.map(s=>{const isHost=s.host_id===userId;const reg=mine.find(r=>r.session_id===s.id);const isLive=s.session_room_state?.status==='live';return <article className={`session-card ${isLive?'live':''}`} key={s.id} onClick={()=>setDetailId(s.id)}><div className={`session-cover ${isLive?'live-cover':''}`} style={s.cover_image_url?{backgroundImage:`url(${s.cover_image_url})`,backgroundSize:'cover',backgroundPosition:'center'}:undefined}><div className="session-cover-top"><Video size={22}/><div className="session-cover-labels"><span className="session-type-badge">{s.session_type==='in_person'?'In Person':s.session_type==='hybrid'?'Hybrid':'Online'}</span>{isLive&&<span className="live-badge"><CircleDot size={10}/> LIVE</span>}{reg&&reg.status==='waitlisted'&&<span className="waitlist-badge">Waitlisted</span>}</div></div><span className="session-category-tag">{s.category}</span></div><div className="session-body"><div className="session-host"><span>{s.profiles?.avatar_url?<img src={s.profiles.avatar_url} alt=""/>:initials(s.profiles?.display_name||s.profiles?.full_name)}</span><div><b>{s.profiles?.display_name||s.profiles?.full_name||'Host'}</b><small>{isHost?'You':'Healer'}</small></div></div><h3>{s.title}</h3><p>{s.description.slice(0,120)}{s.description.length>120?'…':''}</p><div className="session-meta"><span><CalendarDays size={12}/> {fmtDate(s.starts_at)}</span><span><Clock3 size={12}/> {fmtTime(s.starts_at)} – {fmtTime(s.ends_at)}</span><span>{duration(s.starts_at,s.ends_at)}</span><span><Users size={12}/> {s.capacity} spots</span>{s.price>0&&<span>${s.price}</span>}</div><div className="session-actions">{isLive&&<button className="join-live-btn" onClick={(e)=>{e.stopPropagation();setDetailId(s.id)}}><CircleDot size={14}/> Join Live</button>}{!isHost&&!reg&&!isRegistrationClosed(s)&&<button onClick={(e)=>{e.stopPropagation();register(s)}}>Register</button>}{!isHost&&!reg&&isRegistrationClosed(s)&&<button disabled className="reg-closed">Registration Closed</button>}{!isHost&&reg&&reg.status==='registered'&&<button className="registered-btn" onClick={(e)=>{e.stopPropagation();register(s)}}>Cancel</button>}{!isHost&&reg&&reg.status==='waitlisted'&&<button className="waitlisted-btn" onClick={(e)=>{e.stopPropagation();register(s)}}>Leave Waitlist</button>}{isHost&&<button onClick={(e)=>{e.stopPropagation();setDetailId(s.id)}}>Manage</button>}</div></div></article>})}</div>}</section></div>
 }
 
 function CreateSessionForm({userId,onCreated,onCancel}:{userId:string;onCreated:()=>void;onCancel:()=>void}){

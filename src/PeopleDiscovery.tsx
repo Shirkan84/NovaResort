@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   BadgeCheck, CalendarDays, ChevronLeft, ChevronRight, Filter, Sun,
   Languages, MapPin, MessageCircleMore, Search, UserPlus, UsersRound, X
@@ -239,6 +239,7 @@ export function HealersDirectory({ userId, onClose, onOpenRoom, onOpenProfile, o
 }) {
   const [items, setItems] = useState<HealerProfile[]>([])
   const [query, setQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
   const [professionalType, setProfessionalType] = useState('all')
   const [language, setLanguage] = useState('all')
   const [country, setCountry] = useState('all')
@@ -249,18 +250,25 @@ export function HealersDirectory({ userId, onClose, onOpenRoom, onOpenProfile, o
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { friendships, reload } = useRelationships(userId)
 
   const countries = useMemo(() => ['all', ...Array.from(new Set(items.map(item => item.country).filter(Boolean) as string[])).sort()], [items])
   const languages = useMemo(() => ['all', ...Array.from(new Set(items.flatMap(item => item.languages || []))).sort()], [items])
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
+  function handleQueryChange(v:string){
+    setQuery(v)
+    if(debounceRef.current)clearTimeout(debounceRef.current)
+    debounceRef.current=setTimeout(()=>setDebouncedQuery(v),300)
+  }
+
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
       const result = await searchPublicHealers({
-        query,
+        query: debouncedQuery,
         professionalType,
         language,
         country,
@@ -278,10 +286,10 @@ export function HealersDirectory({ userId, onClose, onOpenRoom, onOpenProfile, o
       setTotal(0)
     }
     setLoading(false)
-  }, [query, professionalType, language, country, onlineOnly, verifiedOnly, availability, page])
+  }, [debouncedQuery, professionalType, language, country, onlineOnly, verifiedOnly, availability, page])
 
   useEffect(() => { load() }, [load])
-  useEffect(() => { setPage(0) }, [query, professionalType, language, country, onlineOnly, verifiedOnly, availability])
+  useEffect(() => { setPage(0) }, [debouncedQuery, professionalType, language, country, onlineOnly, verifiedOnly, availability])
 
   return <div className="feature-overlay">
     <section className="directory-window discovery-window healers-window">
@@ -290,7 +298,7 @@ export function HealersDirectory({ userId, onClose, onOpenRoom, onOpenProfile, o
         <button onClick={onClose}><X/></button>
       </header>
       <div className="healers-toolbar">
-        <label className="healer-search"><Search size={15}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search by name, specialty, language, or bio"/></label>
+        <label className="healer-search"><Search size={15}/><input value={query} onChange={event => handleQueryChange(event.target.value)} placeholder="Search by name, specialty, language, or bio"/></label>
         <label><Filter size={14}/><select value={professionalType} onChange={event => setProfessionalType(event.target.value)}>{professionalTypes.map(([value,label]) => <option value={value} key={value}>{label}</option>)}</select></label>
         <label><Languages size={14}/><select value={language} onChange={event => setLanguage(event.target.value)}>{languages.map(value => <option value={value} key={value}>{value === 'all' ? 'Any language' : value}</option>)}</select></label>
         <label><MapPin size={14}/><select value={country} onChange={event => setCountry(event.target.value)}>{countries.map(value => <option value={value} key={value}>{value === 'all' ? 'Any country' : value}</option>)}</select></label>
