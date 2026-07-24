@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react'
 import { Bug, Lightbulb, MessageCircleQuestion, Send, Star, Upload, X, CheckCircle2, Loader2, Flag } from 'lucide-react'
 import { supabase, supabaseUrl } from './supabase'
+import { useFocusTrap } from './hooks/useFocusTrap'
 
 const CATEGORIES = [
   { value: 'bug_report', label: 'Bug Report', icon: Bug },
@@ -41,6 +42,7 @@ export function FeedbackForm({ onClose }: { onClose: () => void }) {
   const [submitState, setSubmitState] = useState<SubmitState>('idle')
   const [errorMsg, setErrorMsg] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const containerRef = useFocusTrap(true)
 
   function validate(): boolean {
     const e: Record<string, string> = {}
@@ -138,7 +140,7 @@ export function FeedbackForm({ onClose }: { onClose: () => void }) {
 
   if (submitState === 'success') {
     return (
-      <div className="feature-overlay">
+      <div className="feature-overlay" ref={containerRef}>
         <section className="feedback-form" role="dialog" aria-modal="true" aria-label="Feedback">
           <header>
             <div>
@@ -159,7 +161,7 @@ export function FeedbackForm({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="feature-overlay">
+    <div className="feature-overlay" ref={containerRef}>
       <section className="feedback-form" role="dialog" aria-modal="true" aria-label="Feedback">
         <header>
           <div>

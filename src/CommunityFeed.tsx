@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { CalendarDays, Clock3, Headphones, Heart, Loader2, MapPin, Mic, Play, User, X, ChevronRight, Sparkles } from 'lucide-react'
 import { supabase } from './supabase'
+import { useFocusTrap } from './hooks/useFocusTrap'
 
 type FeedItem = {
   type: 'session' | 'episode' | 'healer'
@@ -30,6 +31,7 @@ export function CommunityFeed({userId, onClose, onOpenSession, onOpenPodcast, on
   const [items, setItems] = useState<FeedItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const containerRef = useFocusTrap(true)
 
   const load = useCallback(async()=>{
     setLoading(true); setError('')
@@ -78,7 +80,7 @@ export function CommunityFeed({userId, onClose, onOpenSession, onOpenPodcast, on
     return <span className="feed-badge">New Healer</span>
   }
 
-  return <div className="feature-overlay"><section className="feed-window" role="dialog" aria-modal="true" aria-label="Activity feed">
+  return <div className="feature-overlay" ref={containerRef}><section className="feed-window" role="dialog" aria-modal="true" aria-label="Activity feed">
     <header>
       <div><h2><Sparkles size={18}/> Activity Feed</h2><p>Latest activity from healers you follow and content you might enjoy.</p></div>
       <button onClick={onClose}><X/></button>

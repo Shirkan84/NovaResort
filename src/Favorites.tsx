@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Bookmark, CalendarDays, ChevronRight, Headphones, Heart, Sun, Trash2, X } from 'lucide-react'
 import { supabase } from './supabase'
+import { useFocusTrap } from './hooks/useFocusTrap'
 
 type SavedSession = {
   save_id: string; session_id: string; saved_at: string;
@@ -51,6 +52,7 @@ export function Favorites({ userId, onClose, onOpenProfile, onOpenPodcast, onOpe
   const [podcasts, setPodcasts] = useState<FollowedPodcast[]>([])
   const [followedHealers, setFollowedHealers] = useState<FollowedHealer[]>([])
   const [loading, setLoading] = useState(true)
+  const containerRef = useFocusTrap(true)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -133,7 +135,7 @@ export function Favorites({ userId, onClose, onOpenProfile, onOpenPodcast, onOpe
   ]
 
   return (
-    <div className="feature-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="feature-overlay" ref={containerRef} onClick={(e) => e.target === e.currentTarget && onClose()}>
       <section className="directory-window favorites-window" role="dialog" aria-modal="true" aria-label="Favorites">
         <header>
           <div>

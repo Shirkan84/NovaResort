@@ -38,6 +38,7 @@ import { WellnessJourney } from './WellnessJourney'
 import { HealerAnalytics } from './HealerAnalytics'
 import './explore.css'
 import './community-features.css'
+import { ErrorBoundary } from './ErrorBoundary'
 
 const LazyWellnessJourney = React.lazy(() => import('./WellnessJourney').then(m => ({ default: m.WellnessJourney })))
 const LazyHealerAnalytics = React.lazy(() => import('./HealerAnalytics').then(m => ({ default: m.HealerAnalytics })))
@@ -564,6 +565,7 @@ function App() {
       </header>
 
       <div className="content">
+      <ErrorBoundary>
       <React.Suspense fallback={<div className="auth-loader"><Logo/><span/></div>}>
         {route.notFound ? <section className="welcome"><div style={{gridColumn:'1/-1',textAlign:'center',padding:'80px 20px'}}><p className="eyebrow">PAGE NOT FOUND</p><h1>This page doesn't exist.</h1><p className="platform-intro">The link you followed may be broken or the page may have been removed.</p><div className="welcome-actions" style={{justifyContent:'center'}}><button className="primary" onClick={closeOverlay}><Home size={17}/> Go to homepage</button></div></div></section> :
         <>
@@ -590,6 +592,7 @@ function App() {
         </>
         }
       </React.Suspense>
+      </ErrorBoundary>
       </div>
     </main>
     {menuOpen && <button className="backdrop" aria-label="Close menu" onClick={() => setMenuOpen(false)}/>} 

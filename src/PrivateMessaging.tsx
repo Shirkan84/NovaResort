@@ -3,6 +3,7 @@ import { BadgeCheck, Ban, Camera, Check, ChevronLeft, Copy, Flag, Image, Mic, Mo
 import { supabase } from './supabase'
 import type { DbRoom } from './CommunityFeatures'
 import './private-messaging.css'
+import { useFocusTrap } from './hooks/useFocusTrap'
 
 type Profile = { id:string; full_name:string; display_name:string|null; avatar_url:string|null; country:string|null; profile_type:string; about:string; interests:string[]; specialties:string[]; online:boolean }
 type MessageDeliveryStatus = 'sending'|'sent'|'failed'|'read'
@@ -48,6 +49,7 @@ export function PrivateChats({onClose,onOpenRoom}:{onClose:()=>void;onOpenRoom:(
   const [loading,setLoading]=useState(true)
   const [busy,setBusy]=useState('')
   const [error,setError]=useState('')
+  const containerRef = useFocusTrap(true)
 
   const loadRooms=useCallback(async()=>{
     const {data,error}=await supabase.rpc('list_private_rooms')
@@ -110,7 +112,7 @@ export function PrivateChats({onClose,onOpenRoom}:{onClose:()=>void;onOpenRoom:(
   const filteredPeople=people.filter(p=>displayName(p).toLowerCase().includes(q)||(p.country||'').toLowerCase().includes(q))
   const filteredRooms=rooms.filter(r=>r.name.toLowerCase().includes(q)||(r.last_message||'').toLowerCase().includes(q))
 
-  return <div className="pm-overlay"><section className="pm-inbox" role="dialog" aria-modal="true" aria-label="Private messages">
+  return <div className="pm-overlay" ref={containerRef}><section className="pm-inbox" role="dialog" aria-modal="true" aria-label="Private messages">
     <header className="pm-inbox-header"><div><h2>{creating?'New Conversation':'Messages'}</h2><p className="pm-subtitle">{creating?'Choose one person to start a private conversation.':'Your private conversations.'}</p></div><div className="pm-inbox-actions"><button className="pm-btn-sm" onClick={()=>setCreating(!creating)}>{creating?'Back':'New'}</button><button className="pm-icon-btn" onClick={onClose} aria-label="Close"><X size={18}/></button></div></header>
     <label className="pm-search"><Search size={14}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder={creating?'Search people...':'Search conversations...'}/></label>
     {!creating&&requests.length>0&&<section className="pm-requests"><h3>Connection requests</h3>{requests.map(request=>{const p=request.profiles;return <article key={request.id}><span className="pm-req-avatar">{p?.avatar_url?<img src={p.avatar_url} alt={displayName(p||{} as Profile) + " avatar"}/>:initials(displayName(p||{} as Profile))}</span><div className="pm-req-info"><b>{p?displayName(p):'Member'}</b><small>Wants to connect</small></div><div className="pm-req-actions"><button disabled={busy===request.id} onClick={()=>respond(request,'accepted')}>Accept</button><button disabled={busy===request.id} onClick={()=>respond(request,'declined')}>Decline</button></div></article>})}</section>}
@@ -163,6 +165,7 @@ export function PrivateChatRoom({room,userId,onClose,onOpenProfile}:{room:DbRoom
   const cameraStreamRef=useRef<MediaStream|null>(null)
   const videoRef=useRef<HTMLVideoElement>(null)
   const canvasRef=useRef<HTMLCanvasElement>(null)
+  const containerRef = useFocusTrap(true)
 
   const nearBottom=()=>{const el=listRef.current;return !el||el.scrollHeight-el.scrollTop-el.clientHeight<90}
   const privateRoom=room as PrivateRoom
@@ -445,7 +448,7 @@ export function PrivateChatRoom({room,userId,onClose,onOpenProfile}:{room:DbRoom
     })
   }
 
-  return <div className="pm-overlay"><section className="pm-chat" role="dialog" aria-modal="true" aria-label="Private messages">
+  return <div className="pm-overlay" ref={containerRef}><section className="pm-chat" role="dialog" aria-modal="true" aria-label="Private messages">
     <header className="pm-header">
       <button className="pm-back" onClick={onClose} aria-label="Back"><ChevronLeft size={20}/></button>
       <button className="pm-header-profile" onClick={()=>otherUserId&&onOpenProfile?.(otherUserId)}>

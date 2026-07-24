@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { CalendarDays, CheckCircle2, ChevronRight, Clock3, Sun, X, XCircle } from 'lucide-react'
 import { supabase } from './supabase'
+import { useFocusTrap } from './hooks/useFocusTrap'
 
 type MySession = {
   id: string; session_id: string; registration_status: string; registered_at: string;
@@ -28,6 +29,7 @@ export function SessionHistory({ userId, onClose, onNotice }: SessionHistoryProp
   const [tab, setTab] = useState<'upcoming' | 'completed' | 'cancelled'>('upcoming')
   const [sessions, setSessions] = useState<MySession[]>([])
   const [loading, setLoading] = useState(true)
+  const containerRef = useFocusTrap(true)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -55,7 +57,7 @@ export function SessionHistory({ userId, onClose, onNotice }: SessionHistoryProp
   const tabs: [typeof tab, string][] = [['upcoming', 'Upcoming'], ['completed', 'Completed'], ['cancelled', 'Cancelled']]
 
   return (
-    <div className="feature-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="feature-overlay" ref={containerRef} onClick={(e) => e.target === e.currentTarget && onClose()}>
       <section className="directory-window session-history-window" role="dialog" aria-modal="true" aria-label="Session history">
         <header>
           <div>

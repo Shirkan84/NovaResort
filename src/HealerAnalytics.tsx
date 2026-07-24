@@ -7,6 +7,7 @@ import {
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from './supabase'
 import './analytics.css'
+import { useFocusTrap } from './hooks/useFocusTrap'
 
 type HealerAnalyticsData = {
   profile: {
@@ -30,6 +31,7 @@ export function HealerAnalytics({ healerId, onClose }: {
   const [analytics, setAnalytics] = useState<HealerAnalyticsData | null>(null)
   const [dateRange, setDateRange] = useState(30)
   const [loading, setLoading] = useState(true)
+  const containerRef = useFocusTrap(true)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -50,7 +52,7 @@ export function HealerAnalytics({ healerId, onClose }: {
     : 0
 
   return (
-    <div className="feature-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="feature-overlay" ref={containerRef} onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="ha-window" role="dialog" aria-modal="true" aria-label="Healer analytics">
         <header className="ha-header">
           <div>

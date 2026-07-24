@@ -8,6 +8,7 @@ import type { DbRoom } from './CommunityFeatures'
 import { searchPublicHealers, type PublicHealer } from './services/healers'
 import { isApprovedHealer, publicAccountLabel, searchMembers, type PublicMember } from './services/members'
 import './people-discovery.css'
+import { useFocusTrap } from './hooks/useFocusTrap'
 
 type Profile = PublicMember
 type HealerProfile = PublicHealer
@@ -101,6 +102,7 @@ function PeopleDiscoveryPanel({ userId, onClose, onOpenRoom, onOpenProfile }:{ u
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const { friendships, blocked, reload } = useRelationships(userId)
+  const containerRef = useFocusTrap(true)
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQuery(query), 250)
@@ -147,7 +149,7 @@ function PeopleDiscoveryPanel({ userId, onClose, onOpenRoom, onOpenProfile }:{ u
     onOpenRoom({ id:data, name:nameOf(person), description:'Private two-person conversation', icon:'<>', theme:'sage', is_private:true })
   }
 
-  return <div className="feature-overlay">
+  return <div className="feature-overlay" ref={containerRef}>
     <section className="directory-window discovery-window" role="dialog" aria-modal="true" aria-label="People discovery">
       <header>
         <div><h2>Discover Members</h2><p>Meet people across Nova Resort, explore their profiles, and build meaningful connections.</p></div>
@@ -252,6 +254,7 @@ export function HealersDirectory({ userId, onClose, onOpenRoom, onOpenProfile, o
   const [error, setError] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { friendships, reload } = useRelationships(userId)
+  const containerRef = useFocusTrap(true)
 
   const countries = useMemo(() => ['all', ...Array.from(new Set(items.map(item => item.country).filter(Boolean) as string[])).sort()], [items])
   const languages = useMemo(() => ['all', ...Array.from(new Set(items.flatMap(item => item.languages || []))).sort()], [items])
@@ -291,7 +294,7 @@ export function HealersDirectory({ userId, onClose, onOpenRoom, onOpenProfile, o
   useEffect(() => { load() }, [load])
   useEffect(() => { setPage(0) }, [debouncedQuery, professionalType, language, country, onlineOnly, verifiedOnly, availability])
 
-  return <div className="feature-overlay">
+  return <div className="feature-overlay" ref={containerRef}>
     <section className="directory-window discovery-window healers-window" role="dialog" aria-modal="true" aria-label="People discovery">
       <header>
         <div><h2>Healers Directory</h2><p>Browse active wellness professionals who allow discovery on Nova Resort.</p></div>

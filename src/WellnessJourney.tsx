@@ -9,6 +9,7 @@ import {
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from './supabase'
 import './analytics.css'
+import { useFocusTrap } from './hooks/useFocusTrap'
 
 type Achievement = {
   id: string; title: string; description: string; icon_name: string;
@@ -95,6 +96,7 @@ export function WellnessJourney({ userId, onClose, onOpenFeature }: {
   const [dateRange, setDateRange] = useState(30)
   const [loading, setLoading] = useState(true)
   const [newAchievements, setNewAchievements] = useState<Achievement[]>([])
+  const containerRef = useFocusTrap(true)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -177,7 +179,7 @@ export function WellnessJourney({ userId, onClose, onOpenFeature }: {
   ]
 
   return (
-    <div className="feature-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="feature-overlay" ref={containerRef} onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="wj-window" role="dialog" aria-modal="true" aria-label="Wellness journey">
         {/* New Achievement Toast */}
         {newAchievements.length > 0 && (
