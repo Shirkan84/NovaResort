@@ -170,8 +170,12 @@ function EpisodeList({ podcast, userId, onPlay, selectedEpisodeId }: { podcast: 
   const [loadingMore, setLoadingMore] = useState(false)
   const [comments, setComments] = useState<Comment[]>([])
   const [comment, setComment] = useState('')
+  const [editingCommentId, setEditingCommentId] = useState<string|null>(null)
+  const [editingCommentBody, setEditingCommentBody] = useState('')
   const [reportingId, setReportingId] = useState<string | null>(null)
   const [reportReason, setReportReason] = useState('')
+  const [reactionCounts, setReactionCounts] = useState<Record<string, number>>({})
+  const [myReactions, setMyReactions] = useState<string[]>([])
   const selected = episodes.find(e => e.id === selectedEpisodeId) || episodes[0]
   const EP_PAGE = 20
 
@@ -206,8 +210,22 @@ function EpisodeList({ podcast, userId, onPlay, selectedEpisodeId }: { podcast: 
   }
 
   async function react(ep: Episode) {
-    await supabase.from('podcast_reactions').upsert({ episode_id: ep.id, user_id: userId, reaction: 'supportive' })
+    const { data } = await supabase.rpc('toggle_episode_reaction', { p_episode_id: ep.id, p_reaction: 'heart' })
+    if (data) {
+      setMyReactions(data.user_reactions || [])
+      setReactionCounts(data.reaction_counts || {})
+    }
   }
+
+  useEffect(() => {
+    if (!selected?.reactions_enabled || !selected?.id) return
+    supabase.rpc('get_episode_reactions', { p_episode_id: selected.id }).then(({ data }) => {
+      if (data) {
+        setMyReactions(data.user_reactions || [])
+        setReactionCounts(data.reaction_counts || {})
+      }
+    })
+  }, [selected?.id, selected?.reactions_enabled])
 
   async function submitReport(ep: Episode) {
     if (!reportReason.trim()) return
@@ -221,7 +239,24 @@ function EpisodeList({ podcast, userId, onPlay, selectedEpisodeId }: { podcast: 
     if (!selected || !comment.trim()) return
     await supabase.from('podcast_comments').insert({ episode_id: selected.id, user_id: userId, body: comment.trim() })
     setComment('')
-    supabase.from('podcast_comments').select('id,body,created_at,user_id,profiles(display_name,full_name,avatar_url)').eq('episode_id', selected.id).is('deleted_at', null).order('created_at', { ascending: true }).limit(50).then(({ data }) => setComments((data as unknown as Comment[]) || []))
+    supabase.from('podcast_comments').select('id,body,created_at,user_id,profiles(display_name,full_name,avatar_url)').eq('episode_id', selected.id).order('created_at', { ascending: true }).limit(50).then(({ data }) => setComments((data as unknown as Comment[]) || []))
+  }
+
+  async function editComment(commentId: string) {
+    if (!editingCommentBody.trim()) return
+    await supabase.rpc('edit_podcast_comment', { p_comment_id: commentId, p_body: editingCommentBody.trim() })
+    setEditingCommentId(null)
+    setEditingCommentBody('')
+    if (selected) {
+      const { data } = await supabase.from('podcast_comments').select('id,body,created_at,user_id,profiles(display_name,full_name,avatar_url)').eq('episode_id', selected.id).order('created_at', { ascending: true }).limit(50)
+      setComments((data as unknown as Comment[]) || [])
+    }
+  }
+
+  async function deleteComment(commentId: string) {
+    if (!confirm('Delete this comment?')) return
+    await supabase.rpc('delete_podcast_comment', { p_comment_id: commentId })
+    setComments(prev => prev.filter(c => c.id !== commentId))
   }
 
   async function shareEpisode(ep: Episode) {
@@ -275,7 +310,7 @@ function EpisodeList({ podcast, userId, onPlay, selectedEpisodeId }: { podcast: 
       <p>{selected.description}</p>
       <div className="episode-tools">
         <button onClick={() => onPlay({ ...selected, podcast_title: podcast.title, creator_name: podcast.creator_name })}><Play size={14} /> Play episode</button>
-        {selected.reactions_enabled && <button onClick={() => react(selected)}><Heart size={14} /> React</button>}
+        {selected.reactions_enabled && <button className={myReactions.includes('heart') ? 'active' : ''} onClick={() => react(selected)}><Heart size={14} fill={myReactions.includes('heart') ? 'currentColor' : 'none'} /> {reactionCounts.heart || 0} {myReactions.includes('heart') ? 'Liked' : 'Like'}</button>}
         <button onClick={() => shareEpisode(selected)}><Share2 size={14} /> Share</button>
         {selected.saved && <button onClick={() => save(selected)}><Bookmark size={14} fill="currentColor" /> Saved</button>}
       </div>
@@ -283,7 +318,11 @@ function EpisodeList({ podcast, userId, onPlay, selectedEpisodeId }: { podcast: 
       {selected.transcript && <details className="transcript-details"><summary><FileAudio size={14} /> Transcript</summary><p>{selected.transcript}</p></details>}
       {selected.show_notes && <details className="transcript-details"><summary><FileAudio size={14} /> Show Notes</summary><p>{selected.show_notes}</p></details>}
       {selected.comments_enabled ? <form className="comment-form" onSubmit={addComment}><input value={comment} onChange={e => setComment(e.target.value)} placeholder="Add a calm, respectful comment" /><button><Send size={14} /> Comment</button></form> : <p className="muted">Comments are disabled for this episode.</p>}
-      {selected.comments_enabled && <div className="comment-list">{comments.map(c => <article key={c.id}><b>{c.profiles?.display_name || c.profiles?.full_name || 'Nova member'}</b><p>{c.body}</p><time>{new Date(c.created_at).toLocaleString()}</time></article>)}</div>}
+      {selected.comments_enabled && <div className="comment-list">{comments.map(c => <article key={c.id}><b>{c.profiles?.display_name || c.profiles?.full_name || 'Nova member'}</b>
+        {editingCommentId === c.id ? <div className="comment-edit"><input value={editingCommentBody} onChange={e => setEditingCommentBody(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') editComment(c.id); if (e.key === 'Escape') setEditingCommentId(null) }}/><div className="comment-edit-actions"><button onClick={() => editComment(c.id)}>Save</button><button onClick={() => setEditingCommentId(null)}>Cancel</button></div></div> :
+        <p>{c.body}</p>}
+        <time>{new Date(c.created_at).toLocaleString()}{c.user_id === userId && editingCommentId !== c.id && <span className="comment-actions"><button onClick={() => { setEditingCommentId(c.id); setEditingCommentBody(c.body) }}>Edit</button><button onClick={() => deleteComment(c.id)}>Delete</button></span>}</time>
+      </article>)}</div>}
     </section>}
   </div>
 }

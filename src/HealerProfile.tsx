@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   X, MapPin, Globe, Star, Heart, Users, CalendarDays, MessageCircleMore,
-  BadgeCheck, Clock, ChevronRight, Link2, Loader2, ExternalLink, Share2, Bookmark
+  BadgeCheck, Clock, ChevronRight, Link2, Loader2, ExternalLink, Share2, Bookmark, Flag
 } from 'lucide-react'
 import { supabase } from './supabase'
+import { ReportModal } from './ShareReportModals'
 import './healer-profile.css'
 
 type HealerProfileData = {
@@ -140,6 +141,7 @@ export function HealerProfile({
   const [reviewPage, setReviewPage] = useState(0)
   const [hasMoreReviews, setHasMoreReviews] = useState(true)
   const [loadingReviews, setLoadingReviews] = useState(false)
+  const [showReport, setShowReport] = useState(false)
 
   const isOwn = currentUserId === healerId
 
@@ -336,6 +338,9 @@ export function HealerProfile({
             <button className="hp-btn hp-btn-outline" onClick={shareProfile}>
               <Share2 size={14} />
             </button>
+            {!isOwn && <button className="hp-btn hp-btn-outline" onClick={() => setShowReport(true)} title="Report profile">
+              <Flag size={14} />
+            </button>}
           </div>
         </div>
 
@@ -583,6 +588,7 @@ export function HealerProfile({
           )}
         </div>
       </div>
+      {showReport && <ReportModal title="Profile" onReport={async(reason,details)=>{await supabase.rpc('report_profile',{target_user_id:healerId,reason,details})}} onClose={() => setShowReport(false)} />}
     </div>
   )
 }

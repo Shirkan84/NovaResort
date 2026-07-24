@@ -3,6 +3,7 @@ import { CalendarDays, Clock3, Headphones, Heart, MapPin, Mic, Play, Plus, Searc
 import { supabase } from './supabase'
 import { searchSessions, type SessionSearchResult } from './services/search'
 import { CATEGORIES } from './categories'
+import { SessionLikeButton } from './SessionLikeButton'
 
 type FeaturedHealer = {id:string;full_name:string;display_name:string|null;avatar_url:string|null;professional_title:string|null;country:string|null;specialties:string[]|null;online:boolean|null;professional_verification_status:string|null}
 type FeaturedPodcast = {id:string;title:string;short_description:string|null;cover_image_url:string|null;category:string|null;language:string|null;follower_count:number;episode_count:number;total_plays:number}
@@ -87,6 +88,7 @@ export function ExplorePage({userId,onClose,onOpenSession,onOpenCategory}:{userI
           {upcomingSessions.slice(0,6).map(s=><article key={s.id} className="explore-session-card" onClick={()=>onOpenSession(s.id)}>
             <div className="explore-session-cover" style={s.cover_image_url?{backgroundImage:`url(${s.cover_image_url})`}:undefined}>
               <span className="explore-session-type">{s.session_type==='in_person'?'In Person':s.session_type==='hybrid'?'Hybrid':'Online'}</span>
+              <SessionLikeButton sessionId={s.id} userId={userId}/>
             </div>
             <div className="explore-session-body">
               <h3>{s.title}</h3>

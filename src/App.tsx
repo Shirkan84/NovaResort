@@ -31,7 +31,10 @@ import './member-dashboard.css'
 import { GlobalSearch } from './GlobalSearch'
 import { ExplorePage } from './Explore'
 import { CategoryPage } from './CategoryPage'
+import { CommunityFeed } from './CommunityFeed'
+import { NotificationPreferences } from './NotificationPreferences'
 import './explore.css'
+import './community-features.css'
 
 type Room = {
   title: string; description: string; people: number; color: string; icon: string; tags: string[]
@@ -40,7 +43,7 @@ type LiveProfile = { id:string;full_name:string;display_name:string|null;avatar_
 type RecentMessage = { id:string;body:string;created_at:string;profiles?:{full_name:string;avatar_url:string|null}|null;rooms?:{id:string;name:string}|null }
 type Friendship = { id:string; requester_id:string; addressee_id:string; status:string }
 type NextSession = { id:string; title:string; starts_at:string; host_id:string }
-type Feature = 'discover'|'people'|'healers'|'profile'|'notifications'|'messages'|'safety'|'connections'|'sessions'|'podcasts'|'healer'|'feedback'|'feedback-admin'|'dashboard'|'favorites'|'session-history'|'explore'|'category'
+type Feature = 'discover'|'people'|'healers'|'profile'|'notifications'|'messages'|'safety'|'connections'|'sessions'|'podcasts'|'healer'|'feedback'|'feedback-admin'|'dashboard'|'favorites'|'session-history'|'explore'|'category'|'community-feed'|'notif-prefs'
 type AuthView = 'login'|'register'|'register-member'|'register-healer'|'check-email'|'callback'|null
 type AppRoute = { feature: Feature | null; roomId: string | null; profileId: string | null; podcastId: string | null; episodeId: string | null; podcastStudio: boolean; studioAction: string | null; studioPodcastId: string | null; studioEpisodeId: string | null; sessionId: string | null; sessionView: string | null; authView: AuthView; notFound: boolean; categorySlug: string | null }
 
@@ -98,6 +101,8 @@ function routeFromHash(): AppRoute {
   }
   if (value === 'sessions' || value === 'sessions/upcoming') return { ...base, feature: 'sessions' }
   if (value.startsWith('category/')) return { ...base, feature: 'category', categorySlug: value.slice(9) || null }
+  if (value === 'community-feed' || value === 'feed') return { ...base, feature: 'community-feed' }
+  if (value === 'notif-prefs' || value === 'notification-preferences') return { ...base, feature: 'notif-prefs' }
   if (value === 'explore') return { ...base, feature: 'explore' }
   if (value === 'notifications') return { ...base, feature: 'notifications' }
   if (value === 'favorites') return { ...base, feature: 'favorites' }
@@ -133,6 +138,8 @@ function navFromFeature(feature: Feature | null) {
   if (feature === 'session-history') return 'Sessions'
   if (feature === 'explore') return 'Home'
   if (feature === 'category') return 'Home'
+  if (feature === 'community-feed') return 'Home'
+  if (feature === 'notif-prefs') return 'Home'
   return 'Home'
 }
 
@@ -495,6 +502,7 @@ function App() {
           <button className="language-toggle" onClick={()=>switchLanguage(language==='en'?'he':'en')}><Languages size={17}/>{language==='en'?'עברית':'English'}</button>
           <button className="icon-btn" aria-label="Toggle theme" onClick={() => setDark(!dark)}>{dark ? <Sun size={19}/> : <Moon size={19}/>}</button>
           <button className="icon-btn notification" aria-label="Notifications" onClick={() => openFeature('notifications')}><Bell size={20}/>{metrics.notifications>0&&<i>{metrics.notifications}</i>}</button>
+          <button className="icon-btn" aria-label="Activity Feed" onClick={() => openFeature('community-feed')}><Sparkles size={19}/></button>
           <button className="user-chip" onClick={()=>openFeature('profile')}><div className="avatar user">{currentAvatar?<img src={currentAvatar} alt=""/>:initials}</div><ChevronDown size={15}/></button>
           <button className="header-signout" disabled={signingOut} onClick={signOut}>{signingOut?'Signing out...':'Sign out'}</button>
         </div>
@@ -546,6 +554,8 @@ function App() {
     {feature==='feedback-admin' && <FeedbackAdmin onClose={closeOverlay}/>} 
     {feature==='explore' && <ExplorePage userId={session.user.id} onClose={closeOverlay} onOpenSession={(id)=>{closeOverlay();openFeature('sessions');setTimeout(()=>setRoute(`sessions/${id}`),50)}} onOpenCategory={(slug)=>setRoute(`category/${slug}`)}/>}
     {feature==='category' && <CategoryPage slug={route.categorySlug||''} userId={session.user.id} onClose={closeOverlay} onOpenSession={(id)=>{closeOverlay();openFeature('sessions');setTimeout(()=>setRoute(`sessions/${id}`),50)}} onOpenProfile={openProfile} onOpenPodcast={openPodcast} onOpenCategory={(slug)=>setRoute(`category/${slug}`)}/>}
+    {feature==='community-feed' && <CommunityFeed userId={session.user.id} onClose={closeOverlay} onOpenSession={(id)=>{closeOverlay();openFeature('sessions');setTimeout(()=>setRoute(`sessions/${id}`),50)}} onOpenPodcast={openPodcast} onOpenProfile={openProfile}/>}
+    {feature==='notif-prefs' && <NotificationPreferences userId={session.user.id} onClose={closeOverlay}/>}
     {showGlobalSearch && <GlobalSearch onClose={()=>setShowGlobalSearch(false)} onSelect={(type,id)=>{
       setShowGlobalSearch(false)
       if(type==='session'){openFeature('sessions');setTimeout(()=>setRoute(`sessions/${id}`),50)}

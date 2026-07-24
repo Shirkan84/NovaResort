@@ -3,6 +3,7 @@ import { CalendarDays, ChevronRight, Clock3, Headphones, Loader2, MapPin, X } fr
 import { supabase } from './supabase'
 import { searchSessions, type SessionSearchResult } from './services/search'
 import { getCategoryBySlug, slugToCategoryName, CATEGORIES } from './categories'
+import { SessionLikeButton } from './SessionLikeButton'
 
 type FeaturedHealer = {id:string;full_name:string;display_name:string|null;avatar_url:string|null;professional_title:string|null;country:string|null;specialties:string[]|null;online:boolean|null;professional_verification_status:string|null}
 type FeaturedPodcast = {id:string;title:string;short_description:string|null;cover_image_url:string|null;category:string|null;language:string|null;follower_count:number;episode_count:number;total_plays:number}
@@ -69,6 +70,7 @@ export function CategoryPage({slug,userId,onClose,onOpenSession,onOpenProfile,on
             {sessions.map(s => <button key={s.id} className={`explore-session-card ${s.status === 'live' ? 'live' : ''}`} onClick={() => onOpenSession(s.id)}>
               <div className="explore-session-cover" style={s.cover_image_url ? { backgroundImage: `url(${s.cover_image_url})` } : undefined}>
                 {s.status === 'live' && <span className="explore-live-badge"><span className="live-dot"/> LIVE</span>}
+                <SessionLikeButton sessionId={s.id} userId={userId}/>
               </div>
               <div className="explore-session-body">
                 <h3>{s.title}</h3>

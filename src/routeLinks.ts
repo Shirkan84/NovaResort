@@ -19,6 +19,8 @@ const ROUTE_TO_BUTTON: Record<string, string> = {
   'community-guidelines': 'Visit safety center',
   privacy: 'Visit safety center',
   terms: 'Visit safety center',
+  'community-feed': 'Discover',
+  'notif-prefs': 'Bell',
 }
 
 function isPodcastRoute(route: string): boolean {
