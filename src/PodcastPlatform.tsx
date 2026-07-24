@@ -145,11 +145,36 @@ export function PodcastMiniPlayer({ episode, onClose }: { episode: PlayerEpisode
   const [durationState, setDurationState] = useState(0)
   const [speed, setSpeed] = useState(1)
   const [muted, setMuted] = useState(false)
+  const playStartRef = useRef<number | null>(null)
   useEffect(() => { if (audio.current) { audio.current.playbackRate = speed; audio.current.muted = muted } }, [speed, muted])
   useEffect(() => { setPlaying(false); setPosition(episode?.listen_position_seconds || 0) }, [episode?.id])
+
+  const saveProgress = () => {
+    const pos = Math.floor(position)
+    const dur = Math.floor(durationState || episode?.audio_duration_seconds || 0)
+    if (episode?.id) {
+      supabase.rpc('record_podcast_play', { episode_ref: episode.id, position_seconds: pos, duration_seconds: dur })
+      if (pos > 60) {
+        supabase.rpc('record_daily_listening', { p_episode_id: episode.id, p_minutes: Math.ceil(pos / 60) })
+        supabase.rpc('check_and_award_achievements')
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (!playing || !episode?.id) return
+    const timer = setInterval(saveProgress, 30000)
+    return () => clearInterval(timer)
+  }, [playing, episode?.id, position, durationState])
+
+  useEffect(() => {
+    const handler = () => { if (playing) saveProgress() }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [playing, position, durationState])
+
   if (!episode) return null
   const src = episode.audio_url || ''
-  const saveProgress = () => supabase.rpc('record_podcast_play', { episode_ref: episode.id, position_seconds: Math.floor(position), duration_seconds: Math.floor(durationState || episode.audio_duration_seconds || 0) })
   return <aside className="podcast-player" aria-label="Podcast player">
     {src && <audio ref={audio} src={src} onLoadedMetadata={e => { setDurationState(Math.floor(e.currentTarget.duration || episode.audio_duration_seconds || 0)); if (episode.listen_position_seconds) e.currentTarget.currentTime = episode.listen_position_seconds }} onTimeUpdate={e => setPosition(Math.floor(e.currentTarget.currentTime))} onPause={saveProgress} onEnded={() => { setPlaying(false); saveProgress() }} />}
     <button aria-label={playing ? 'Pause episode' : 'Play episode'} disabled={!src} onClick={() => { if (!audio.current) return; if (playing) { audio.current.pause(); setPlaying(false) } else { if (currentAudio && currentAudio !== audio.current) { currentAudio.pause() }; currentAudio = audio.current; audio.current.play().then(() => setPlaying(true)).catch(() => setPlaying(false)) } }}>{playing ? <Pause /> : <Play />}</button>
@@ -214,6 +239,7 @@ function EpisodeList({ podcast, userId, onPlay, selectedEpisodeId }: { podcast: 
     if (data) {
       setMyReactions(data.user_reactions || [])
       setReactionCounts(data.reaction_counts || {})
+      if((data.user_reactions || []).includes('heart')) supabase.rpc('record_community_action', {p_action_type: 'like', p_entity_type: 'episode', p_entity_id: ep.id}).then(()=>{})
     }
   }
 

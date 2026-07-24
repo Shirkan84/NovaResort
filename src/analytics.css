@@ -1,0 +1,759 @@
+/* ============================================================
+   PHASE 7: ANALYTICS & WELLNESS JOURNEY STYLES
+   ============================================================ */
+
+/* Wellness Journey Window */
+.wj-window {
+  width: min(780px, 100%);
+  max-height: min(860px, 94vh);
+  background: var(--card);
+  border-radius: 20px;
+  box-shadow: 0 24px 80px #17231e66;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  color: inherit;
+}
+
+.wj-header {
+  padding: 17px 20px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.wj-header > div { flex: 1; }
+
+.wj-header h2 {
+  font: 700 15px Manrope;
+  margin: 0;
+  color: var(--deep);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wj-header p { font-size: 9px; color: var(--muted); margin: 3px 0 0; }
+
+.wj-header > button {
+  width: 34px;
+  height: 34px;
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  background: var(--page);
+  border-radius: 10px;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+}
+
+/* Achievement Toast */
+.wj-achievement-toast {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #2d4a3e, #3d6554);
+  color: #ffd700;
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+  animation: toast 0.4s ease;
+}
+
+.wj-achievement-toast b {
+  display: block;
+  font-size: 11px;
+  color: #fff;
+}
+
+.wj-achievement-toast span {
+  font-size: 9px;
+  color: #ccc;
+}
+
+/* Quick Stats Bar */
+.wj-quick-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.wj-stat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-right: 1px solid var(--line);
+}
+
+.wj-stat:last-child { border-right: 0; }
+
+.wj-stat b {
+  font: 700 16px Manrope;
+  display: block;
+  color: var(--deep);
+}
+
+.wj-stat span {
+  font-size: 9px;
+  color: var(--muted);
+  display: block;
+}
+
+.wj-streak-icon {
+  color: #e74c3c;
+}
+
+/* Tabs */
+.wj-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+}
+
+.wj-tabs button {
+  flex: none;
+  padding: 10px 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font: 600 11px Manrope;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.wj-tabs button.active {
+  color: var(--deep);
+  border-bottom-color: var(--green);
+}
+
+.wj-tabs button span {
+  font-size: 9px;
+  background: var(--line);
+  color: var(--muted);
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+/* Body */
+.wj-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.wj-loading {
+  text-align: center;
+  padding: 40px;
+  color: var(--muted);
+}
+
+.wj-section {
+  margin-bottom: 20px;
+}
+
+.wj-section h3 {
+  font: 700 13px Manrope;
+  margin: 0 0 12px;
+  color: var(--deep);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Date Range Selector */
+.wj-date-range {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.wj-date-range button {
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.wj-date-range button.active {
+  background: var(--deep);
+  color: white;
+  border-color: var(--deep);
+}
+
+/* Streak Grid */
+.wj-streak-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.wj-streak-card {
+  background: var(--page);
+  border-radius: 12px;
+  padding: 14px;
+  text-align: center;
+  border: 1px solid var(--line);
+}
+
+.wj-streak-card b {
+  font: 700 22px Manrope;
+  display: block;
+  margin: 6px 0 2px;
+  color: var(--deep);
+}
+
+.wj-streak-card span {
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.wj-flame {
+  color: #e74c3c;
+}
+
+/* Charts */
+.wj-chart {
+  background: var(--page);
+  border-radius: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+}
+
+/* Metrics Grid */
+.wj-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.wj-metric {
+  background: var(--page);
+  border-radius: 10px;
+  padding: 12px;
+  text-align: center;
+  border: 1px solid var(--line);
+}
+
+.wj-metric b {
+  font: 700 18px Manrope;
+  display: block;
+  color: var(--deep);
+}
+
+.wj-metric span {
+  font-size: 9px;
+  color: var(--muted);
+}
+
+/* Progress List */
+.wj-progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wj-progress-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--page);
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+
+.wj-progress-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.wj-progress-title {
+  font: 600 11px Manrope;
+  display: block;
+  color: var(--deep);
+}
+
+.wj-progress-desc {
+  font-size: 9px;
+  color: var(--muted);
+  display: block;
+}
+
+.wj-progress-bar {
+  height: 4px;
+  background: var(--line);
+  border-radius: 999px;
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.wj-progress-bar > div {
+  height: 100%;
+  background: var(--green);
+  border-radius: 999px;
+  transition: width 0.5s ease;
+}
+
+.wj-progress-pct {
+  font: 600 10px Manrope;
+  color: var(--muted);
+  min-width: 30px;
+  text-align: right;
+}
+
+/* Journey List */
+.wj-journey-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.wj-journey-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.wj-journey-item:last-child { border-bottom: 0; }
+
+.wj-journey-icon {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: white;
+}
+
+.wj-journey-icon.listening { background: #dca15d; }
+.wj-journey-icon.session { background: #4ecdc4; }
+.wj-journey-icon.community { background: #9b59b6; }
+
+.wj-journey-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.wj-journey-info b {
+  font: 600 11px Manrope;
+  display: block;
+  color: var(--deep);
+}
+
+.wj-journey-info p {
+  font-size: 10px;
+  color: var(--muted);
+  margin: 2px 0;
+}
+
+.wj-journey-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 9px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.wj-tag {
+  padding: 2px 6px;
+  background: var(--line);
+  border-radius: 6px;
+  font-size: 8px;
+  font-weight: 600;
+}
+
+.wj-load-more {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  margin-top: 10px;
+}
+
+/* Achievements */
+.wj-achieve-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--page);
+  border-radius: 10px;
+  margin-bottom: 16px;
+  font: 600 12px Manrope;
+  color: var(--deep);
+}
+
+.wj-achieve-category {
+  margin-bottom: 16px;
+}
+
+.wj-achieve-category h4 {
+  font: 700 11px Manrope;
+  margin: 0 0 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.wj-achieve-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 8px;
+}
+
+.wj-achieve-card {
+  background: var(--page);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  text-align: center;
+  transition: transform 0.2s;
+}
+
+.wj-achieve-card.locked { opacity: 0.6; }
+
+.wj-achieve-icon {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 8px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  display: grid;
+  place-items: center;
+  background: var(--card);
+}
+
+.wj-achieve-card b {
+  font: 700 11px Manrope;
+  display: block;
+  color: var(--deep);
+  margin-bottom: 4px;
+}
+
+.wj-achieve-card p {
+  font-size: 9px;
+  color: var(--muted);
+  margin: 0 0 8px;
+  line-height: 1.3;
+}
+
+.wj-achieve-progress {
+  margin-top: 8px;
+}
+
+.wj-achieve-progress span {
+  font-size: 9px;
+  color: var(--muted);
+  display: block;
+  margin-top: 3px;
+}
+
+.wj-achieve-points {
+  font: 700 10px Manrope;
+  display: block;
+  margin-top: 6px;
+}
+
+/* Category Bars */
+.wj-category-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wj-category-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+}
+
+.wj-category-bar > span:first-child {
+  min-width: 80px;
+  font-weight: 600;
+  color: var(--deep);
+}
+
+.wj-category-bar > span:last-child {
+  min-width: 24px;
+  text-align: right;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.wj-bar-track {
+  flex: 1;
+  height: 6px;
+  background: var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.wj-bar-track > div {
+  height: 100%;
+  background: var(--green);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+/* Episode List */
+.wj-episode-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wj-episode-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--page);
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+
+.wj-ep-rank {
+  font: 700 10px Manrope;
+  color: var(--muted);
+  min-width: 24px;
+}
+
+.wj-episode-item b {
+  font: 600 11px Manrope;
+  display: block;
+  color: var(--deep);
+}
+
+.wj-episode-item span {
+  font-size: 9px;
+  color: var(--muted);
+}
+
+/* Empty State */
+.wj-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--muted);
+}
+
+.wj-empty h3 {
+  font: 700 14px Manrope;
+  margin: 12px 0 6px;
+  color: var(--deep);
+}
+
+.wj-empty p {
+  font-size: 11px;
+  margin: 0 0 16px;
+}
+
+.wj-btn-primary {
+  padding: 9px 18px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--deep);
+  color: white;
+  font: 600 11px Manrope;
+  cursor: pointer;
+}
+
+/* ============================================================
+   HEALER ANALYTICS STYLES
+   ============================================================ */
+
+.ha-window {
+  width: min(720px, 100%);
+  max-height: min(820px, 92vh);
+  background: var(--card);
+  border-radius: 20px;
+  box-shadow: 0 24px 80px #17231e66;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  color: inherit;
+}
+
+.ha-header {
+  padding: 17px 20px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.ha-header > div { flex: 1; }
+
+.ha-header h2 {
+  font: 700 15px Manrope;
+  margin: 0;
+  color: var(--deep);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ha-header p { font-size: 9px; color: var(--muted); margin: 3px 0 0; }
+
+.ha-header > button {
+  width: 34px;
+  height: 34px;
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  background: var(--page);
+  border-radius: 10px;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+}
+
+.ha-date-range {
+  display: flex;
+  gap: 4px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ha-date-range button {
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.ha-date-range button.active {
+  background: var(--deep);
+  color: white;
+  border-color: var(--deep);
+}
+
+.ha-loading {
+  text-align: center;
+  padding: 40px;
+  color: var(--muted);
+}
+
+.ha-empty {
+  text-align: center;
+  padding: 40px;
+  color: var(--muted);
+}
+
+.ha-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.ha-section {
+  margin-bottom: 20px;
+}
+
+.ha-section h3 {
+  font: 700 13px Manrope;
+  margin: 0 0 12px;
+  color: var(--deep);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ha-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.ha-metric-card {
+  background: var(--page);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  text-align: center;
+}
+
+.ha-metric-card b {
+  font: 700 20px Manrope;
+  display: block;
+  margin: 6px 0 2px;
+  color: var(--deep);
+}
+
+.ha-metric-card span {
+  font-size: 9px;
+  color: var(--muted);
+  display: block;
+}
+
+.ha-metric-card small {
+  font-size: 9px;
+  color: var(--green);
+  display: block;
+  margin-top: 2px;
+}
+
+.ha-change.positive { color: #27ae60; }
+.ha-change.negative { color: #e74c3c; }
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 600px) {
+  .wj-window, .ha-window {
+    width: 100%;
+    height: 100vh;
+    max-height: none;
+    border-radius: 0;
+  }
+
+  .wj-quick-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .wj-streak-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .wj-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .wj-achieve-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ha-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

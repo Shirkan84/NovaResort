@@ -234,6 +234,7 @@ export function HealerDashboard({userId,onOpenSession,onCreateSession,onClose}:{
           <button className="hd-qa" onClick={()=>window.location.hash='#/messages'}><MessageCircleMore size={16}/> Messages</button>
           <button className="hd-qa" onClick={()=>window.location.hash='#/profile'}><Pencil size={16}/> Edit Profile</button>
           <button className="hd-qa" onClick={()=>window.location.hash=`/profile/${userId}`}><ExternalLink size={16}/> Public Profile</button>
+          <button className="hd-qa" onClick={()=>window.location.hash='#/healer-analytics'}><BarChart3 size={16}/> Analytics</button>
         </div>
       </div>
 

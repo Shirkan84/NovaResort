@@ -55,8 +55,8 @@ export function Favorites({ userId, onClose, onOpenProfile, onOpenPodcast, onOpe
   const load = useCallback(async () => {
     setLoading(true)
     const [sessRes, healRes, epRes, podRes, fhRes] = await Promise.all([
-      supabase.rpc('public_get_saved_sessions', { page_limit: 50, page_offset: 0 }),
-      supabase.rpc('public_get_saved_healers_list', { page_limit: 50, page_offset: 0 }),
+      supabase.rpc('get_saved_sessions', { page_limit: 50, page_offset: 0 }),
+      supabase.rpc('get_saved_healers_list', { page_limit: 50, page_offset: 0 }),
       supabase.from('podcast_episode_saves').select('id,episode_id,created_at,episode_title,podcast_id,podcast_title,podcast_cover,audio_url,audio_duration_seconds,category').eq('user_id', userId).order('created_at', { ascending: false }),
       supabase.from('podcast_follows').select('id,created_at,podcast_id,podcasts!podcast_follows_podcast_id_fkey(id,title,cover_image_url,category,follower_count)').eq('user_id', userId).order('created_at', { ascending: false }),
       supabase.rpc('get_followed_healers_list', { page_limit: 50, page_offset: 0 })

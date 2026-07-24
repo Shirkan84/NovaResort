@@ -327,7 +327,7 @@ AS $$
       pr.avatar_url as creator_avatar_url,
       (SELECT COUNT(*)::bigint FROM public.podcast_follows pf2 WHERE pf2.podcast_id = p.id) as follower_count,
       (SELECT COUNT(*)::bigint FROM public.podcast_episodes pe WHERE pe.podcast_id = p.id AND pe.status = 'published') as episode_count,
-      0::bigint as total_plays,
+      (SELECT COUNT(*)::bigint FROM public.podcast_listens pl WHERE pl.episode_id IN (SELECT pe2.id FROM public.podcast_episodes pe2 WHERE pe2.podcast_id = p.id)) as total_plays,
       CASE
         WHEN p.category IN (SELECT category FROM followed_categories) THEN 3
         WHEN p.category = ANY(SELECT unnest(interests) FROM member_interests) THEN 2

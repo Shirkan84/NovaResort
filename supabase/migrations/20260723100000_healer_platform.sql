@@ -361,8 +361,16 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  INSERT INTO public.profile_views (profile_id, viewer_id)
-  VALUES (target_profile, auth.uid());
+  IF target_profile = auth.uid() THEN RETURN; END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profile_views pv
+    WHERE pv.profile_id = target_profile AND pv.viewer_id = auth.uid()
+      AND pv.viewed_at > now() - interval '24 hours'
+  ) THEN
+    INSERT INTO public.profile_views (profile_id, viewer_id)
+    VALUES (target_profile, auth.uid());
+  END IF;
 END;
 $$;
 

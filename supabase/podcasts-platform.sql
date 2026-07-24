@@ -546,9 +546,15 @@ begin
     raise exception 'Episode is unavailable.';
   end if;
 
-  insert into public.podcast_listens (episode_id, user_id, last_position_seconds, listen_duration_seconds, completed_at)
-  values (episode_ref, auth.uid(), greatest(position_seconds, 0), greatest(duration_seconds, 0),
-    case when duration_seconds > 0 and position_seconds >= duration_seconds * 0.9 then now() else null end);
+  if not exists (
+    select 1 from public.podcast_listens pl
+    where pl.episode_id = episode_ref and pl.user_id = auth.uid()
+      and pl.created_at > now() - interval '5 minutes'
+  ) then
+    insert into public.podcast_listens (episode_id, user_id, last_position_seconds, listen_duration_seconds, completed_at)
+    values (episode_ref, auth.uid(), greatest(position_seconds, 0), greatest(duration_seconds, 0),
+      case when duration_seconds > 0 and position_seconds >= duration_seconds * 0.9 then now() else null end);
+  end if;
 
   insert into public.podcast_progress (episode_id, user_id, position_seconds, duration_seconds, updated_at)
   values (episode_ref, auth.uid(), greatest(position_seconds, 0), greatest(duration_seconds, 0), now())

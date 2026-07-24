@@ -30,6 +30,7 @@ export function SessionLikeButton({sessionId, userId}:{
     if(data){
       setLiked(data.liked)
       setCount(data.like_count)
+      if(data.liked) supabase.rpc('record_community_action', {p_action_type: 'like', p_entity_type: 'session', p_entity_id: sessionId}).then(()=>{})
     }else{
       setLiked(prev)
       setCount(prevCount)

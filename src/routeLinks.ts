@@ -21,6 +21,8 @@ const ROUTE_TO_BUTTON: Record<string, string> = {
   terms: 'Visit safety center',
   'community-feed': 'Discover',
   'notif-prefs': 'Bell',
+  'wellness-journey': 'Home',
+  'healer-analytics': 'Home',
 }
 
 function isPodcastRoute(route: string): boolean {

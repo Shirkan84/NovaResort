@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Bookmark, CalendarDays, CheckCircle2, ChevronRight, Clock3, Heart, Headphones, Pause, Play, Star, Trash2, TrendingUp, UsersRound, Sun, X } from 'lucide-react'
+import { Bookmark, CalendarDays, CheckCircle2, ChevronRight, Clock3, Heart, Headphones, Pause, Play, Star, Trash2, TrendingUp, UsersRound, Sun, X, Trophy, Flame } from 'lucide-react'
 import { supabase } from './supabase'
 import './member-dashboard.css'
 
@@ -172,6 +172,7 @@ export function MemberDashboard({ userId, name, onOpenFeature, onOpenProfile, on
         <div className="welcome-actions">
           <button className="primary" onClick={() => onOpenFeature('sessions')}><CalendarDays size={16} /> Browse Sessions</button>
           <button className="secondary-cta" onClick={() => onOpenPodcast()}><Headphones size={16} /> Podcasts</button>
+          <button className="secondary-cta" onClick={() => onOpenFeature('wellness-journey')}><Trophy size={16} /> Wellness Journey</button>
         </div>
       </section>
 

@@ -238,11 +238,13 @@ export function HealerProfile({
     const { data } = await supabase.rpc('toggle_follow_healer', { target_healer: healerId })
     setIsFollowing(data ?? false)
     setStats(prev => prev ? { ...prev, follower_count: prev.follower_count + (data ? 1 : -1) } : prev)
+    if(data) supabase.rpc('record_community_action', {p_action_type: 'follow', p_entity_type: 'healer', p_entity_id: healerId}).then(()=>{})
   }
 
   const toggleSave = async () => {
     const { data } = await supabase.rpc('toggle_save_healer', { target_healer: healerId })
     setIsSaved(data ?? false)
+    if(data) supabase.rpc('record_community_action', {p_action_type: 'save_healer', p_entity_type: 'healer', p_entity_id: healerId}).then(()=>{})
   }
 
   const shareProfile = () => {
@@ -588,7 +590,7 @@ export function HealerProfile({
           )}
         </div>
       </div>
-      {showReport && <ReportModal title="Profile" onReport={async(reason,details)=>{await supabase.rpc('report_profile',{target_user_id:healerId,reason,details})}} onClose={() => setShowReport(false)} />}
+      {showReport && <ReportModal title="Profile" onReport={async(reason,details)=>{await supabase.rpc('report_profile',{p_profile_id:healerId,reason,details})}} onClose={() => setShowReport(false)} />}
     </div>
   )
 }

@@ -33,6 +33,8 @@ import { ExplorePage } from './Explore'
 import { CategoryPage } from './CategoryPage'
 import { CommunityFeed } from './CommunityFeed'
 import { NotificationPreferences } from './NotificationPreferences'
+import { WellnessJourney } from './WellnessJourney'
+import { HealerAnalytics } from './HealerAnalytics'
 import './explore.css'
 import './community-features.css'
 
@@ -43,7 +45,7 @@ type LiveProfile = { id:string;full_name:string;display_name:string|null;avatar_
 type RecentMessage = { id:string;body:string;created_at:string;profiles?:{full_name:string;avatar_url:string|null}|null;rooms?:{id:string;name:string}|null }
 type Friendship = { id:string; requester_id:string; addressee_id:string; status:string }
 type NextSession = { id:string; title:string; starts_at:string; host_id:string }
-type Feature = 'discover'|'people'|'healers'|'profile'|'notifications'|'messages'|'safety'|'connections'|'sessions'|'podcasts'|'healer'|'feedback'|'feedback-admin'|'dashboard'|'favorites'|'session-history'|'explore'|'category'|'community-feed'|'notif-prefs'
+type Feature = 'discover'|'people'|'healers'|'profile'|'notifications'|'messages'|'safety'|'connections'|'sessions'|'podcasts'|'healer'|'feedback'|'feedback-admin'|'dashboard'|'favorites'|'session-history'|'explore'|'category'|'community-feed'|'notif-prefs'|'wellness-journey'|'healer-analytics'
 type AuthView = 'login'|'register'|'register-member'|'register-healer'|'check-email'|'callback'|null
 type AppRoute = { feature: Feature | null; roomId: string | null; profileId: string | null; podcastId: string | null; episodeId: string | null; podcastStudio: boolean; studioAction: string | null; studioPodcastId: string | null; studioEpisodeId: string | null; sessionId: string | null; sessionView: string | null; authView: AuthView; notFound: boolean; categorySlug: string | null }
 
@@ -103,6 +105,8 @@ function routeFromHash(): AppRoute {
   if (value.startsWith('category/')) return { ...base, feature: 'category', categorySlug: value.slice(9) || null }
   if (value === 'community-feed' || value === 'feed') return { ...base, feature: 'community-feed' }
   if (value === 'notif-prefs' || value === 'notification-preferences') return { ...base, feature: 'notif-prefs' }
+  if (value === 'wellness-journey' || value === 'journey') return { ...base, feature: 'wellness-journey' }
+  if (value === 'healer-analytics') return { ...base, feature: 'healer-analytics' }
   if (value === 'explore') return { ...base, feature: 'explore' }
   if (value === 'notifications') return { ...base, feature: 'notifications' }
   if (value === 'favorites') return { ...base, feature: 'favorites' }
@@ -140,6 +144,8 @@ function navFromFeature(feature: Feature | null) {
   if (feature === 'category') return 'Home'
   if (feature === 'community-feed') return 'Home'
   if (feature === 'notif-prefs') return 'Home'
+  if (feature === 'wellness-journey') return 'Home'
+  if (feature === 'healer-analytics') return 'Home'
   return 'Home'
 }
 
@@ -556,6 +562,8 @@ function App() {
     {feature==='category' && <CategoryPage slug={route.categorySlug||''} userId={session.user.id} onClose={closeOverlay} onOpenSession={(id)=>{closeOverlay();openFeature('sessions');setTimeout(()=>setRoute(`sessions/${id}`),50)}} onOpenProfile={openProfile} onOpenPodcast={openPodcast} onOpenCategory={(slug)=>setRoute(`category/${slug}`)}/>}
     {feature==='community-feed' && <CommunityFeed userId={session.user.id} onClose={closeOverlay} onOpenSession={(id)=>{closeOverlay();openFeature('sessions');setTimeout(()=>setRoute(`sessions/${id}`),50)}} onOpenPodcast={openPodcast} onOpenProfile={openProfile}/>}
     {feature==='notif-prefs' && <NotificationPreferences userId={session.user.id} onClose={closeOverlay}/>}
+    {feature==='wellness-journey' && <WellnessJourney userId={session.user.id} onClose={closeOverlay} onOpenFeature={(f)=>openFeature(f as Feature)}/>}
+    {feature==='healer-analytics' && <HealerAnalytics healerId={session.user.id} onClose={closeOverlay}/>}
     {showGlobalSearch && <GlobalSearch onClose={()=>setShowGlobalSearch(false)} onSelect={(type,id)=>{
       setShowGlobalSearch(false)
       if(type==='session'){openFeature('sessions');setTimeout(()=>setRoute(`sessions/${id}`),50)}
