@@ -1,3 +1,4 @@
+import React from 'react'
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import {
   Bell, CalendarDays, ChevronDown, ChevronRight, CircleUserRound, Clock3,
@@ -37,6 +38,17 @@ import { WellnessJourney } from './WellnessJourney'
 import { HealerAnalytics } from './HealerAnalytics'
 import './explore.css'
 import './community-features.css'
+
+const LazyWellnessJourney = React.lazy(() => import('./WellnessJourney').then(m => ({ default: m.WellnessJourney })))
+const LazyHealerAnalytics = React.lazy(() => import('./HealerAnalytics').then(m => ({ default: m.HealerAnalytics })))
+const LazyCommunityFeed = React.lazy(() => import('./CommunityFeed').then(m => ({ default: m.CommunityFeed })))
+const LazyExplorePage = React.lazy(() => import('./Explore').then(m => ({ default: m.ExplorePage })))
+const LazyCategoryPage = React.lazy(() => import('./CategoryPage').then(m => ({ default: m.CategoryPage })))
+const LazyGlobalSearch = React.lazy(() => import('./GlobalSearch').then(m => ({ default: m.GlobalSearch })))
+const LazyFavorites = React.lazy(() => import('./Favorites').then(m => ({ default: m.Favorites })))
+const LazySessionHistory = React.lazy(() => import('./SessionHistory').then(m => ({ default: m.SessionHistory })))
+const LazyNotificationPreferences = React.lazy(() => import('./NotificationPreferences').then(m => ({ default: m.NotificationPreferences })))
+const LazyFeedbackAdmin = React.lazy(() => import('./FeedbackAdmin').then(m => ({ default: m.FeedbackAdmin })))
 
 type Room = {
   title: string; description: string; people: number; color: string; icon: string; tags: string[]
@@ -306,6 +318,40 @@ function App() {
     window.addEventListener('hashchange', syncRoute)
     return () => window.removeEventListener('hashchange', syncRoute)
   }, [])
+  useEffect(() => {
+    const titles: Record<string, string> = {
+      '': 'Nova Resort — Connect, Reflect & Grow',
+      'home': 'Nova Resort — Connect, Reflect & Grow',
+      'dashboard': 'My Dashboard — Nova Resort',
+      'discover': 'Discover People — Nova Resort',
+      'people': 'Community Rooms — Nova Resort',
+      'healers': 'Healers — Nova Resort',
+      'podcasts': 'Podcasts — Nova Resort',
+      'connections': 'Connections — Nova Resort',
+      'messages': 'Messages — Nova Resort',
+      'sessions': 'Sessions — Nova Resort',
+      'healer': 'Healer Dashboard — Nova Resort',
+      'feedback': 'Send Feedback — Nova Resort',
+      'feedback-admin': 'Feedback Management — Nova Resort',
+      'notifications': 'Notifications — Nova Resort',
+      'safety': 'Safety Center — Nova Resort',
+      'profile': 'Settings — Nova Resort',
+      'favorites': 'Saved Content — Nova Resort',
+      'session-history': 'Session History — Nova Resort',
+      'explore': 'Explore — Nova Resort',
+      'community-feed': 'Activity Feed — Nova Resort',
+      'notif-prefs': 'Notification Settings — Nova Resort',
+      'wellness-journey': 'Wellness Journey — Nova Resort',
+      'healer-analytics': 'Healer Analytics — Nova Resort',
+      'category': 'Category — Nova Resort',
+      'login': 'Sign In — Nova Resort',
+      'register': 'Register — Nova Resort',
+      'not-found': 'Page Not Found — Nova Resort',
+    }
+    const featureKey = route.feature || (!route.roomId && !route.profileId ? 'home' : '')
+    const key = route.notFound ? 'not-found' : route.authView || featureKey
+    document.title = titles[key] || 'Nova Resort'
+  }, [route])
   useEffect(() => applyLanguage(language), [language])
   useEffect(() => { localStorage.setItem('nova-theme', dark ? 'dark' : 'light') }, [dark])
   useEffect(() => { return () => { if (noticeTimer.current) window.clearTimeout(noticeTimer.current) } }, [])
@@ -518,6 +564,7 @@ function App() {
       </header>
 
       <div className="content">
+      <React.Suspense fallback={<div className="auth-loader"><Logo/><span/></div>}>
         {route.notFound ? <section className="welcome"><div style={{gridColumn:'1/-1',textAlign:'center',padding:'80px 20px'}}><p className="eyebrow">PAGE NOT FOUND</p><h1>This page doesn't exist.</h1><p className="platform-intro">The link you followed may be broken or the page may have been removed.</p><div className="welcome-actions" style={{justifyContent:'center'}}><button className="primary" onClick={closeOverlay}><Home size={17}/> Go to homepage</button></div></div></section> :
         <>
         {feature === 'dashboard' ? (
@@ -542,6 +589,7 @@ function App() {
         </footer>
         </>
         }
+      </React.Suspense>
       </div>
     </main>
     {menuOpen && <button className="backdrop" aria-label="Close menu" onClick={() => setMenuOpen(false)}/>} 
@@ -556,18 +604,18 @@ function App() {
     {feature==='sessions' && <SessionsPage userId={session.user.id} isHealer={canCreateContent} onClose={closeOverlay} initialSessionId={route.sessionId} initialSessionView={route.sessionView}/>} 
     {feature==='healer' && <HealerDashboard userId={session.user.id} onOpenSession={(id)=>{closeOverlay();openFeature('sessions');setTimeout(()=>setRoute(`sessions/${id}`),50)}} onCreateSession={()=>{closeOverlay();openFeature('sessions');setTimeout(()=>setRoute('sessions'),100)}} onClose={closeOverlay}/>} 
     {feature==='notifications' && <Notifications userId={session.user.id} onClose={closeOverlay}/>} 
-    {feature==='favorites' && <Favorites userId={session.user.id} onClose={closeOverlay} onOpenProfile={openProfile} onOpenPodcast={openPodcast} onOpenFeature={(f)=>openFeature(f as Feature)} onNotice={act}/>} 
-    {feature==='session-history' && <SessionHistory userId={session.user.id} onClose={closeOverlay} onNotice={act}/>} 
+    {feature==='favorites' && <LazyFavorites userId={session.user.id} onClose={closeOverlay} onOpenProfile={openProfile} onOpenPodcast={openPodcast} onOpenFeature={(f)=>openFeature(f as Feature)} onNotice={act}/>} 
+    {feature==='session-history' && <LazySessionHistory userId={session.user.id} onClose={closeOverlay} onNotice={act}/>} 
     {feature==='safety' && <SafetyCenter onClose={closeOverlay}/>} 
     {feature==='feedback' && <FeedbackForm onClose={closeOverlay}/>} 
-    {feature==='feedback-admin' && <FeedbackAdmin onClose={closeOverlay}/>} 
-    {feature==='explore' && <ExplorePage userId={session.user.id} onClose={closeOverlay} onOpenSession={(id)=>{closeOverlay();openFeature('sessions');setTimeout(()=>setRoute(`sessions/${id}`),50)}} onOpenCategory={(slug)=>setRoute(`category/${slug}`)}/>}
-    {feature==='category' && <CategoryPage slug={route.categorySlug||''} userId={session.user.id} onClose={closeOverlay} onOpenSession={(id)=>{closeOverlay();openFeature('sessions');setTimeout(()=>setRoute(`sessions/${id}`),50)}} onOpenProfile={openProfile} onOpenPodcast={openPodcast} onOpenCategory={(slug)=>setRoute(`category/${slug}`)}/>}
-    {feature==='community-feed' && <CommunityFeed userId={session.user.id} onClose={closeOverlay} onOpenSession={(id)=>{closeOverlay();openFeature('sessions');setTimeout(()=>setRoute(`sessions/${id}`),50)}} onOpenPodcast={openPodcast} onOpenProfile={openProfile}/>}
-    {feature==='notif-prefs' && <NotificationPreferences userId={session.user.id} onClose={closeOverlay}/>}
-    {feature==='wellness-journey' && <WellnessJourney userId={session.user.id} onClose={closeOverlay} onOpenFeature={(f)=>openFeature(f as Feature)}/>}
-    {feature==='healer-analytics' && <HealerAnalytics healerId={session.user.id} onClose={closeOverlay}/>}
-    {showGlobalSearch && <GlobalSearch onClose={()=>setShowGlobalSearch(false)} onSelect={(type,id)=>{
+    {feature==='feedback-admin' && <LazyFeedbackAdmin onClose={closeOverlay}/>} 
+    {feature==='explore' && <LazyExplorePage userId={session.user.id} onClose={closeOverlay} onOpenSession={(id)=>{closeOverlay();openFeature('sessions');setTimeout(()=>setRoute(`sessions/${id}`),50)}} onOpenCategory={(slug)=>setRoute(`category/${slug}`)}/>}
+    {feature==='category' && <LazyCategoryPage slug={route.categorySlug||''} userId={session.user.id} onClose={closeOverlay} onOpenSession={(id)=>{closeOverlay();openFeature('sessions');setTimeout(()=>setRoute(`sessions/${id}`),50)}} onOpenProfile={openProfile} onOpenPodcast={openPodcast} onOpenCategory={(slug)=>setRoute(`category/${slug}`)}/>}
+    {feature==='community-feed' && <LazyCommunityFeed userId={session.user.id} onClose={closeOverlay} onOpenSession={(id)=>{closeOverlay();openFeature('sessions');setTimeout(()=>setRoute(`sessions/${id}`),50)}} onOpenPodcast={openPodcast} onOpenProfile={openProfile}/>}
+    {feature==='notif-prefs' && <LazyNotificationPreferences userId={session.user.id} onClose={closeOverlay}/>}
+    {feature==='wellness-journey' && <LazyWellnessJourney userId={session.user.id} onClose={closeOverlay} onOpenFeature={(f)=>openFeature(f as Feature)}/>}
+    {feature==='healer-analytics' && <LazyHealerAnalytics healerId={session.user.id} onClose={closeOverlay}/>}
+    {showGlobalSearch && <LazyGlobalSearch onClose={()=>setShowGlobalSearch(false)} onSelect={(type,id)=>{
       setShowGlobalSearch(false)
       if(type==='session'){openFeature('sessions');setTimeout(()=>setRoute(`sessions/${id}`),50)}
       else if(type==='podcast'){openPodcast(id)}

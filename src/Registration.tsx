@@ -4,6 +4,7 @@ import {
   Heart, Languages, CheckCircle2, Loader2, AlertTriangle
 } from 'lucide-react'
 import { supabase } from './supabase'
+import { getLanguage, switchLanguage } from './i18n'
 
 const EMAIL_REDIRECT_TO = import.meta.env.VITE_BASE_URL || `${window.location.origin}/`
 
@@ -60,7 +61,7 @@ function ErrorIcon() { return <AlertTriangle size={17}/> }
 // ============================================================
 export function RegistrationChooser() {
   const [hovered, setHovered] = useState<string|null>(null)
-  return <div className="auth-page"><button className="language-toggle auth-language" onClick={()=>{}}>🌐 EN</button>
+  return <div className="auth-page"><button className="language-toggle auth-language" onClick={()=>switchLanguage(getLanguage()==='en'?'he':'en')}><Languages/>{getLanguage()==='en'?'\u05E2\u05D1\u05E8\u05D9\u05EA':'English'}</button>
     <div className="auth-brand"><Logo/><div className="auth-hero-copy"><span className="auth-kicker"><Sparkles size={13}/> JOIN NOVA RESORT</span><h1>How would you like<br/>to <em>join us?</em></h1><p>Choose the path that feels right for you. Both roles give you full access to our caring community.</p><div className="auth-values"><span><Heart/>Kind connection</span><span><ShieldCheck/>Safety first</span><span><Leaf/>Space to grow</span></div></div><p className="auth-disclaimer">Nova Resort is a peer-support community and is not a substitute for professional or emergency services.</p></div>
     <div className="auth-panel"><div className="auth-mobile-logo"><Logo/></div><div className="auth-form-wrap">      <span className="welcome-icon"><Leaf size={22}/></span>
       <h2>Create Your Account</h2>
